@@ -11,35 +11,41 @@ import os
 
 
 class loadImage:
+    loadedImages = []
     def __init__(self, imageFolder = "images"):
+        # constructor that loads images from a specified folder
         self.imageDir = setupFilepath(imageFolder)
         self.openImages()
+        self.saveImages()
 
     def __del__(self):
-        # deconstructor that removes images added by the addon
-        for filename in os.listdir(self.imageDir):
-            # print("filename: "+filename)
-            for image in bpy.data.images:
-                # print("image: "+image.name)
-                if filename==image.name:
-                    bpy.data.images.remove(image)
-                #     print(image)
-            # print(self.imageDir+filename)
-            # image = bpy.data.images.load(self.imageDir+filename)
+        # destructor that removes images added by the addon, this will keep the blend file tidy despite running the addon multiple times. 
+        def cleanupImages():
+            for filename in os.listdir(self.imageDir):
+                # print("filename: "+filename)
+                for image in bpy.data.images:
+                    # print("image: "+image.name)
+                    if filename==image.name:
+                        bpy.data.images.remove(image)
+        # use the call below to disable this function if you're testing image updating
+        cleanupImages()
         print("Cleaned up images")
 
+    # Optimizations thanks to https://blender.stackexchange.com/questions/3673/why-is-accessing-image-data-so-slow/3678#3678
     # Blender stores images as 1D arrays, ordered as described in https://blender.stackexchange.com/questions/13422/crop-image-with-python-script/13516#13516
     # This function generates a 2D array of (r,g,b,a) tuples from said 1D list
-    def blenderImageTo2D(self, blenderImage):
-        print("loading image:"+blenderImage.name)
+    def blendImage2xyImage(self, blenderImage):
+        print("Loading image:"+blenderImage.name)
         image = []
         pixels = blenderImage.pixels[:]
         x = blenderImage.size[0]
         y = blenderImage.size[1]
         index = 0
-        for i in range(x):
+        # iterate over every row
+        for i in range(y):
             pixelRow = []
-            for j in range(y):
+            # iterate over every pixel in a row
+            for j in range(x):
                 r = pixels[index]
                 g = pixels[index+1]
                 b = pixels[index+2]
@@ -53,23 +59,39 @@ class loadImage:
         # print(image)
         return image
 
-    # Still need to write this one. Not as urgent.
-    def twoDToBlenderImage(self, image):
-        return
+    # update a given blender image with a given xyImage
+    def xyImage2blendImage(self, xyImage, blendImage):
+        print("Saving xyImage: "+xyImage[0])
+        xyPixels = []
+        # Reversed to fix the thing that's done in blendImage2xyImage
+        for row in reversed(xyImage[1]):
+            for pixel in row:
+                for i in range(4):
+                    xyPixels.append(pixel[i])
+        blendImage.pixels[:] = xyPixels
+        blendImage.update()
 
     def createArrays(self):
         return
 
+    # Open all the images in a specified folder
     def openImages(self):
         # This loops over every file in the identified images directory
-        loadedImages = []
         for filename in os.listdir(self.imageDir):
             # print(self.imageDir+filename)
             image = bpy.data.images.load(self.imageDir+filename)
-            loadedImages.append(self.blenderImageTo2D(image))
+            self.loadedImages.append((filename,self.blendImage2xyImage(image)))
             # print("Loaded")
             # print(image)
+        # print(self.loadedImages[0])
 
+    # Save the xy images to the right blend images
+    def saveImages(self):
+        for xyImage in self.loadedImages:
+            for blendImage in bpy.data.images:
+                # print("blend image image: "+blendImage.name)
+                if xyImage[0]==blendImage.name:
+                    self.xyImage2blendImage(xyImage, blendImage)
 
 def setupFilepath(imageFolder):
     # This will get the currently opened blender file's directory
@@ -90,10 +112,10 @@ if __name__ == "__main__":
     startTime = time.time()
     print("Running script...")
 
-    # scope so that the image class gets deleted
+    # function scope so that the image class gets deleted automatically (so the destructor will be called)
     def main():
         # Test the script itself
-        image = loadImage("Sphere")
+        image = loadImage("CubeHard")
         # del image
 
     main()
