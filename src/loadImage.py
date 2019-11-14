@@ -16,7 +16,7 @@ class loadImage:
         # constructor that loads images from a specified folder
         self.imageDir = setupFilepath(imageFolder)
         self.openImages()
-        self.saveImages()
+        # self.saveImages()
 
     def __del__(self):
         # destructor that removes images added by the addon, this will keep the blend file tidy despite running the addon multiple times. 
