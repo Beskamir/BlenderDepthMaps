@@ -111,24 +111,26 @@ class imageProcessor:
 
     # Blender stores images as 1D arrays, ordered as described in https://blender.stackexchange.com/questions/13422/crop-image-with-python-script/13516#13516
     # This function generates a 2D array of (r,g,b,a) tuples from said 1D list
-    # Calling the result at index [i][j] will return the pixel in the i-th row, j-th column, where i=j=0 is the top-left pixel.
+    # Calling the result at index [i][j] will return the pixel in the i-th row from the bottom, j-th column from the left
+    # i.e. where i=j=0 is the bottom-left pixel.
     def blenderImageToTwoD(self, blenderImage):
         x = blenderImage.size[0]
         y = blenderImage.size[1]
         image = numpy.empty(shape=(x,y), dtype=(float,4))
         index = 0
         for i in range(x):
-            pixelRow = []
             for j in range(y):
                 r = blenderImage.pixels[index]
                 g = blenderImage.pixels[index+1]
                 b = blenderImage.pixels[index+2]
                 a = blenderImage.pixels[index+3]
-                pixelRow[i][j] = (r,g,b,a)
+                # Apparently, in blender images, lower alpha -> "darker"
+                if a > 0:
+                    r = r/a
+                    g = g/a
+                    b = b/a
+                image[i][j] = (r,g,b,a)
                 index += 4
-            # As described in https://blender.stackexchange.com/questions/13422/crop-image-with-python-script/13516#13516
-            # the topmost pixel rows come latest in the image.
-            # Therefore, we insert rows at the "front" of our 2D array.
         return image
 
     # Still need to write this one. Not as urgent.
@@ -216,6 +218,14 @@ class imageProcessor:
             print("cropRight:", cropRight)
             print("cropTop:", cropTop)
             print("cropBottom:", cropBottom)
+            for xp in range(len(image)-1, -1, -1):
+                for yp in range(len(image[xp])):
+                    pixel = image[xp][yp]
+                    if pixel[3] <= 0:
+                        print("___", end=", ")
+                    else:
+                        print(pixel[0], end=", ")
+                print("\n_ _ _ _ _ _ _")
         self.xLen = len(self.images2D[TOP_FACE])
         self.yLen = len(self.images2D[FRONT_FACE][0])
         self.zLen = len(self.images2D[FRONT_FACE])
@@ -231,15 +241,16 @@ class imageProcessor:
     
     def setImageHeightRangeSingle(self, selectedFace):
         selectedImage = self.images2D[selectedFace]
-        # First, find the "highest" pixel's value
+        # First, find 1 minus the "highest" pixel's value
+        # (The 1 minus is because darker pixels are higher, but it's more intuitive to encode higher values as, well, higher floats)
         highest = 0.0
         for i in range(len(selectedImage)):
             for j in range(len(selectedImage[i])):
                 # Check the pixel's alpha, to ensure pixel is not transparent.
                 if selectedImage[i][j][3] > 0:
                     # Choose any of the RGB channels for height comparison
-                    if selectedImage[i][j][0] > highest:
-                        highest = selectedImage[i][j][0]
+                    if (1-selectedImage[i][j][0]) > highest:
+                        highest = (1-selectedImage[i][j][0])
         # Then, from ANY "side" reference image, find out where this max value occurs.
         # We'll choose the image from the top side.
         correspondingFace = BORDER_DICTIONARY[selectedFace][TOP_SIDE]["face"]
@@ -267,7 +278,7 @@ class imageProcessor:
         else:
             rowToSearch = 0
             rowIncrement = 1
-            if correspondingSide == BOTTOM_SIDE:
+            if correspondingSide == TOP_SIDE:
                 rowToSearch = len(correspondingFaceImage)-1
                 rowIncrement = -1
             # Search row-by-row until we find something opaque.
@@ -296,11 +307,11 @@ class imageProcessor:
             rightColumn = len(selectedImage[row]) - 1
             while selectedImage[row][rightColumn][3] <= 0 and rightColumn >= 0:
                 rightColumn -= 1
-            if leftColumn < len(selectedImage[row]) and selectedImage[row][leftColumn][0] < lowestEdge:
-                lowestEdge = selectedImage[row][leftColumn][0]
+            if leftColumn < len(selectedImage[row]) and (1-selectedImage[row][leftColumn][0]) < lowestEdge:
+                lowestEdge = (1-selectedImage[row][leftColumn][0])
                 lowestSide = LEFT_SIDE
-            if rightColumn >= 0 and selectedImage[row][rightColumn][0] < lowestEdge:
-                lowestEdge = selectedImage[row][rightColumn][0]
+            if rightColumn >= 0 and (1-selectedImage[row][rightColumn][0]) < lowestEdge:
+                lowestEdge = (1-selectedImage[row][rightColumn][0])
                 lowestSide = RIGHT_SIDE
         # Then, the top and bottom sides are tested.
         # (We also do checks on indices in case we somehow, in spite of prior cropping, end up with an all-transparent column)
@@ -312,11 +323,11 @@ class imageProcessor:
             bottomRow = len(selectedImage) - 1
             while selectedImage[bottomRow][column][3] <= 0 and bottomRow >= 0:
                 bottomRow -= 1
-            if topRow < len(selectedImage) and selectedImage[topRow][column][0] < lowestEdge:
-                lowestEdge = selectedImage[topRow][column][0]
+            if topRow < len(selectedImage) and (1-selectedImage[topRow][column][0]) < lowestEdge:
+                lowestEdge = (1-selectedImage[topRow][column][0])
                 lowestSide = TOP_SIDE
-            if bottomRow >= 0 and selectedImage[bottomRow][column][0] < lowestEdge:
-                lowestEdge = selectedImage[bottomRow][column][0]
+            if bottomRow >= 0 and (1-selectedImage[bottomRow][column][0]) < lowestEdge:
+                lowestEdge = (1-selectedImage[bottomRow][column][0])
                 lowestSide = BOTTOM_SIDE
 
         # Then, from THE "side" reference image corresponding to the "lowestEdge" pixel's value
@@ -336,20 +347,22 @@ class imageProcessor:
         depthInwardsLowest = 0
         # First, we handle the case for when correspondingSide is LEFT or RIGHT 
         if correspondingSide == LEFT_SIDE or correspondingSide == RIGHT_SIDE:
+            print("LEFT/RIGHT for face", selectedFace)
             startIndex = 0
             colIncrement = 1
             if correspondingSide == RIGHT_SIDE:
                 startIndex = len(correspondingFaceImage[0])-1
                 colIncrement = -1
-            columnToSearch = startIndex + colIncrement # Start 1 from the edge
+            print("INCREMENT:", colIncrement)
+            columnToSearch = startIndex
             # This array will keep track of the max height found in each row, and where it is.
             rowMaxes = [ { "val": 0.0, "depth":startIndex } ] * len(correspondingFaceImage)
             # Search column-by-column until we find something opaque.
-            while columnToSearch in range (len(correspondingFaceImage[0])):
+            while columnToSearch in range(len(correspondingFaceImage[0])):
                 for row in range(len(correspondingFaceImage)):
                     # Alpha check & comparing with current max
-                    if correspondingFaceImage[row][columnToSearch][3] > 0.0 and correspondingFaceImage[row][columnToSearch][0] > rowMaxes[row]["val"]:
-                        rowMaxes[row]["val"] = correspondingFaceImage[row][columnToSearch][0]
+                    if correspondingFaceImage[row][columnToSearch][3] > 0.0 and (1-correspondingFaceImage[row][columnToSearch][0]) > rowMaxes[row]["val"]:
+                        rowMaxes[row]["val"] = (1-correspondingFaceImage[row][columnToSearch][0])
                         rowMaxes[row]["depth"] = columnToSearch
                 columnToSearch += colIncrement
             # Now, we set depthInwardsLowest to be the greatest distance from the edge observed in rowMaxes.
@@ -359,24 +372,28 @@ class imageProcessor:
                     depthInwardsLowest = curDist
         # THEN, we handle the case for when correspondingSide is TOP or BOTTOM
         else:
+            print("TOP/BOTTOM for face", selectedFace)
             startIndex = 0
             rowIncrement = 1
-            if correspondingSide == BOTTOM_SIDE:
+            if correspondingSide == TOP_SIDE:
                 startIndex = len(correspondingFaceImage)-1
                 rowIncrement = -1
-            rowToSearch = startIndex + rowIncrement # Start 1 from the edge
+            print("INCREMENT:", rowIncrement)
+            rowToSearch = startIndex
             # This array will keep track of the max height found in each column, and where it is.
             colMaxes = [ { "val": 0.0, "depth":startIndex } ] * len(correspondingFaceImage[0])
             # Search row-by-row until we find something opaque.
-            while rowToSearch in range (len(correspondingFaceImage)):
+            while rowToSearch in range(len(correspondingFaceImage)):
                 for col in range(len(correspondingFaceImage[0])):
                     # Alpha check & comparing with current max
-                    if correspondingFaceImage[rowToSearch][col][3] > 0.0 and correspondingFaceImage[rowToSearch][col][0] > colMaxes[col]["val"]:
-                        colMaxes[col]["val"] = correspondingFaceImage[rowToSearch][col][0]
+                    if correspondingFaceImage[rowToSearch][col][3] > 0.0 and (1-correspondingFaceImage[rowToSearch][col][0]) > colMaxes[col]["val"]:
+                        colMaxes[col]["val"] = (1-correspondingFaceImage[rowToSearch][col][0])
                         colMaxes[col]["depth"] = rowToSearch
+                        print("Updating at row:", rowToSearch)
                 rowToSearch += rowIncrement
             # Now, we set depthInwardsLowest to be the greatest distance from the edge observed in colMaxes.
             for c in colMaxes:
+                print("colMax:", c)
                 curDist = abs(c["depth"] - startIndex)
                 if curDist > depthInwardsLowest:
                     depthInwardsLowest = curDist
@@ -415,49 +432,52 @@ class imageProcessor:
 
         self.object3D = numpy.ones(shape=(xLen,yLen,zLen)) # Fill with inside value (1)
 
-        # March, for each pixel on each "face" of the surrounding cube, inwards and replace 1's with 0's (edge) and -1's (outside) values wherever alpha is strictly 0 or 1.
-        for face in FACES:
-            pixelXIndex = 0
-            pixelYIndex = 0
-            highestFloat = self.depthDictionary[face]["highestFloat"]
-            lowestEdgeFloat = self.depthDictionary[face]["lowestEdgeFloat"]
-            highestCellDepth = self.depthDictionary[face]["highestCellDepth"]
-            lowestEdgeCellDepth = self.depthDictionary[face]["lowestEdgeCellDepth"]
-            depthRange = highestFloat - lowestEdgeFloat
-            if depthRange <= 0:
-                print("REMINDER: ALLOW USER-INPUT MODIFICATION FOR CASE WHERE DEPTH RANGE MAPPING CANNOT BE AUTOMATICALLY DETERMINED!")
-                print("SETTING ALL VALUES TO 'MAX' AS TEMPORARY DEFAULT!")
-                # The actual logic happens deeper inside the while loop. Look for it below, marked with "#updateme"
-            index = startDict[face] # Convert into list so that it's mutable
-            # We'll do two phases.
-            # First, we'll do all "definitive" cells, with alpha values zero or one.
-            # Then, we'll do all partial-alpha cells IF there's no conflict.
-            for phase in range(2):
+        # We'll do two phases.
+        # First, we'll do all "definitive" cells, with alpha values zero or one.
+        # Then, we'll do all partial-alpha cells IF there's no conflict.
+        for phase in range(2):
+            # March, for each pixel on each "face" of the surrounding cube, inwards and replace 1's with 0's (edge) and -1's (outside) values wherever alpha is strictly 0 or 1.
+            for face in FACES:
+                pixelXIndex = 0
+                pixelYIndex = 0
+                highestFloat = self.depthDictionary[face]["highestFloat"]
+                lowestEdgeFloat = self.depthDictionary[face]["lowestEdgeFloat"]
+                highestCellDepth = self.depthDictionary[face]["highestCellDepth"]
+                lowestEdgeCellDepth = self.depthDictionary[face]["lowestEdgeCellDepth"]
+                depthRange = highestFloat - lowestEdgeFloat
+                if depthRange <= 0:
+                    print("REMINDER: ALLOW USER-INPUT MODIFICATION FOR CASE WHERE DEPTH RANGE MAPPING CANNOT BE AUTOMATICALLY DETERMINED!")
+                    print("SETTING ALL VALUES TO 'MAX' AS TEMPORARY DEFAULT!")
+                    # The actual logic happens deeper inside the while loop. Look for it below, marked with "#updateme"
+                index = startDict[face] # Convert into list so that it's mutable
+                
                 while inBounds(index):
                     refIndexHoriz = index # Save current index before the "vert" and "inwards" coords are altered
                     while inBounds(index):
                         refIndexVert = index # Save current index before the "inwards" coord is altered
                         depth = 0
-                        index2D = (pixelXIndex, pixelYIndex)
-                        pixelVal = self.images2D[face][index2D]
+                        pixelVal = self.images2D[face][pixelXIndex][pixelYIndex]
+                        # The "1 - " is to represent the higher, darker pixels with higher/larger floats, to be consistent with other parts of this code
+                        pixelHeight = 1-pixelVal[0]
+                        pixelAlpha = pixelVal[3]
                         if depthRange == 0:
                             #updateme
                             depthCap = highestCellDepth
                         else:
-                            depthCap = ((highestFloat-pixelVal[0])*lowestEdgeCellDepth + (pixelVal[0] - lowestEdgeFloat)*highestCellDepth)/depthRange
+                            depthCap = ((highestFloat-pixelHeight)*lowestEdgeCellDepth + (pixelHeight - lowestEdgeFloat)*highestCellDepth)/depthRange
                         # Alpha check
-                        if pixelVal[3] == 1 and phase == 0:
+                        if pixelAlpha == 1 and phase == 0:
                             while inBounds(index) and depth < depthCap:
                                 self.object3D[index] = -1 # OUTSIDE = -1
                                 index = add(index, iteration3D_Dictionary[face]["inwards"])
                                 depth += 1
                             if inBounds(index) and self.object3D[index] == 1:
                                 self.object3D[index] = 0 # BOUNDARY = 0
-                        elif pixelVal[3] == 0 and phase == 0:
+                        elif pixelAlpha == 0 and phase == 0:
                             while inBounds(index):
                                 self.object3D[index] = -1 # OUTSIDE = -1
                                 index = add(index, iteration3D_Dictionary[face]["inwards"])
-                        elif pixelVal[3] != 0 and pixelVal[3] != 1 and phase == 1:
+                        elif pixelAlpha != 0 and pixelAlpha != 1 and phase == 1:
                             while inBounds(index) and depth < depthCap:
                                 # Make sure we don't overwrite a "definitive" value from first phase
                                 if self.object3D[index] == 1:
@@ -473,6 +493,7 @@ class imageProcessor:
                     # reset "vert" and "inwards" and increment "horiz"
                     index = add(refIndexHoriz, iteration3D_Dictionary[face]["horizontal"])
                     pixelXIndex += 1
+                    pixelYIndex = 0
         return
 
 
@@ -480,7 +501,27 @@ class imageProcessor:
 
 if __name__ == "__main__":
     # Test function
-    TEST_IMAGE_PATH_PREFIX = "lowres\\cube_"
+    TEST_IMAGE_PATH_PREFIX = "lowres\\sphere_"
     TEST_IMAGE_PATH_SUFFIX = ".png"
     image = imageProcessor(TEST_IMAGE_PATH_PREFIX, TEST_IMAGE_PATH_SUFFIX)
+    for face in FACES:
+        print("Face info for face", face, ":")
+        d = image.depthDictionary[face]
+        print("highestFloat:", d["highestFloat"], "\nhighestCellDepth:", d["highestCellDepth"], "\nlowestEdgeFloat:", d["lowestEdgeFloat"], "\nlowestEdgeCellDepth:", d["lowestEdgeCellDepth"])
+        print()
+    print("Printing slices along the x-axis")
+    for x in range(image.xLen):
+        print("Slice for x =", x)
+        print("==================")
+        for z in range(image.zLen-1, -1, -1):
+            for y in range(image.yLen):
+                cellVal = image.object3D[x][y][z]
+                printVal = "#"
+                if cellVal > 0:
+                    printVal = "."
+                elif cellVal < 0:
+                    printVal = " " 
+                print(printVal, end=" ")
+            print("\n-----------------")
+        print("\n")
     print("Done imageProcessing.py test.")
