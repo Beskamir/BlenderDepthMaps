@@ -65,11 +65,11 @@ class depthMapsUI_PropertyGroup(PropertyGroup):
 
                     # If all of the guesses are valid, then we update the other file names with them
                     if allGuessesExist:
-                        self.left_face_file = prefix + guess[0] + suffix
-                        self.back_face_file = prefix + guess[1] + suffix
-                        self.right_face_file = prefix + guess[2] + suffix
-                        self.top_face_file = prefix + guess[3] + suffix
-                        self.bottom_face_file = prefix + guess[4] + suffix
+                        self.left_face_file = guess[0]
+                        self.back_face_file = guess[1]
+                        self.right_face_file = guess[2]
+                        self.top_face_file = guess[3]
+                        self.bottom_face_file = guess[4]
                         break
 
         

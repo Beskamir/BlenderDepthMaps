@@ -1,6 +1,7 @@
 import bpy
 import os
 import numpy
+import loadImage
 #from .config import IMAGES_DIR
 
 #References:
@@ -107,16 +108,11 @@ iteration3D_Dictionary = {
 
 class imageProcessor:
     # maxWidth is not actually used at the moment, but I plan to do something with it if there's time later.
-    def __init__(self, pathPrefix, pathSuffix, maxWidth=1024):
-        self.pathPrefix = pathPrefix
-        self.pathSuffix = pathSuffix
-        print("Creating")
-        #self.createArrays(pathPrefix, pathSuffix, maxWidth)
+    def __init__(self, originalFilenames, maxWidth=1024):
+        self.imageLoader = loadImage.loadImage()
+        self.createArrays(originalFilenames, maxWidth)
 
-    def testPrint(self):
-        print("IMPORT WORKS:", self.pathPrefix, self.pathSuffix)
-
-    # Blender stores images as 1D arrays, ordered as described in https://blender.stackexchange.com/questions/13422/crop-image-with-python-script/13516#13516
+    '''# Blender stores images as 1D arrays, ordered as described in https://blender.stackexchange.com/questions/13422/crop-image-with-python-script/13516#13516
     # This function generates a 2D array of (r,g,b,a) tuples from said 1D list
     # Calling the result at index [i][j] will return the pixel in the i-th row from the bottom, j-th column from the left
     # i.e. where i=j=0 is the bottom-left pixel.
@@ -138,26 +134,20 @@ class imageProcessor:
                     b = b/a
                 image[i][j] = (r,g,b,a)
                 index += 4
-        return image
-
-    # Still need to write this one. Not as urgent.
-    def twoDToBlenderImage(self, image):
-        print("NOT IMPLEMENTED YET!")
-        raise NotImplementedError
-        return
+        return image'''
 
     # maxWidth is not actually used at the moment, but I plan to do something with it if there's time later.
-    def createArrays(self, pathPrefix, pathSuffix, maxWidth=1024):
-        self.pathPrefix = pathPrefix
-        self.pathSuffix = pathSuffix
+    def createArrays(self, originalFilenames, maxWidth=1024):
+        self.originalFilenames = originalFilenames
         self.maxWidth = maxWidth
         
         self.cropImages()
-
+        print("Images cropped!")
         #self.resizeImages()
         #self.alignImages()
 
         self.setImageHeightRanges()
+        print("Height ranges set!")
         self.generate3D()
         print("3D map generated!")
         return
@@ -166,10 +156,10 @@ class imageProcessor:
         self.images2D = []
         for i in FACES:
             # Load the image
-            filename = os.path.join(IMAGES_DIR, self.pathPrefix + str(i) + self.pathSuffix)
+            filename = self.originalFilenames[i]
             print("Loading:",filename)
-            image = self.blenderImageToTwoD(bpy.data.images.load(filename))
-            
+            image = self.imageLoader.openImage(filename)
+            print("---------\n"+filename, "has been converted into a 2D array.")
             # Crop the 2D-list "image" to remove all-alpha border regions
             # LEFT
             cropLeft = 0
@@ -196,7 +186,7 @@ class imageProcessor:
                 else:
                     cropRight -= 1
             # TOP
-            cropTop = 0
+            cropTop = len(image)-1
             foundPosAlpha = False
             while not foundPosAlpha:
                 for j in range(len(image[0])):
@@ -206,9 +196,9 @@ class imageProcessor:
                 if foundPosAlpha:
                     break
                 else:
-                    cropTop += 1
+                    cropTop -= 1
             # BOTTOM
-            cropBottom = len(image)-1
+            cropBottom = 0
             foundPosAlpha = False
             while not foundPosAlpha:
                 for j in range(len(image[0])):
@@ -218,22 +208,22 @@ class imageProcessor:
                 if foundPosAlpha:
                     break
                 else:
-                    cropBottom -= 1
-            image = [image[i][cropLeft:cropRight+1] for i in range(cropTop,cropBottom+1)] 
+                    cropBottom += 1
+            image = [image[i][cropLeft:cropRight+1] for i in range(cropBottom,cropTop+1)] 
             self.images2D.append(image)
             print(i, "---------------------")
             print("cropLeft:", cropLeft)
             print("cropRight:", cropRight)
             print("cropTop:", cropTop)
             print("cropBottom:", cropBottom)
-            for xp in range(len(image)-1, -1, -1):
+            '''for xp in range(len(image)-1, -1, -1):
                 for yp in range(len(image[xp])):
                     pixel = image[xp][yp]
                     if pixel[3] <= 0:
                         print("___", end=", ")
                     else:
                         print(pixel[0], end=", ")
-                print("\n_ _ _ _ _ _ _")
+                print("\n_ _ _ _ _ _ _")'''
         self.xLen = len(self.images2D[TOP_FACE])
         self.yLen = len(self.images2D[FRONT_FACE][0])
         self.zLen = len(self.images2D[FRONT_FACE])
@@ -245,6 +235,11 @@ class imageProcessor:
         self.depthDictionary = {}
         for i in FACES:
             self.setImageHeightRangeSingle(i)
+        for face in FACES:
+            print("Face info for face", face, ":")
+            d = self.depthDictionary[face]
+            print("highestFloat:", d["highestFloat"], "\nhighestCellDepth:", d["highestCellDepth"], "\nlowestEdgeFloat:", d["lowestEdgeFloat"], "\nlowestEdgeCellDepth:", d["lowestEdgeCellDepth"])
+            print()
         return
     
     def setImageHeightRangeSingle(self, selectedFace):
@@ -310,10 +305,10 @@ class imageProcessor:
         for row in range(len(selectedImage)):
             #Test from the left
             leftColumn = 0
-            while selectedImage[row][leftColumn][3] <= 0 and leftColumn < len(selectedImage[row]):
+            while leftColumn < len(selectedImage[row]) and selectedImage[row][leftColumn][3] <= 0:
                 leftColumn += 1
             rightColumn = len(selectedImage[row]) - 1
-            while selectedImage[row][rightColumn][3] <= 0 and rightColumn >= 0:
+            while rightColumn >= 0 and selectedImage[row][rightColumn][3] <= 0:
                 rightColumn -= 1
             if leftColumn < len(selectedImage[row]) and (1-selectedImage[row][leftColumn][0]) < lowestEdge:
                 lowestEdge = (1-selectedImage[row][leftColumn][0])
@@ -325,16 +320,16 @@ class imageProcessor:
         # (We also do checks on indices in case we somehow, in spite of prior cropping, end up with an all-transparent column)
         for column in range(len(selectedImage[0])):
             #Test from the top
-            topRow = 0
-            while selectedImage[topRow][column][3] <= 0 and topRow < len(selectedImage):
-                topRow += 1
-            bottomRow = len(selectedImage) - 1
-            while selectedImage[bottomRow][column][3] <= 0 and bottomRow >= 0:
-                bottomRow -= 1
-            if topRow < len(selectedImage) and (1-selectedImage[topRow][column][0]) < lowestEdge:
+            topRow = len(selectedImage) - 1
+            while topRow >= 0 and selectedImage[topRow][column][3] <= 0:
+                topRow -= 1
+            bottomRow = 0
+            while bottomRow < len(selectedImage) and selectedImage[bottomRow][column][3] <= 0:
+                bottomRow += 1
+            if topRow >= 0 and (1-selectedImage[topRow][column][0]) < lowestEdge:
                 lowestEdge = (1-selectedImage[topRow][column][0])
                 lowestSide = TOP_SIDE
-            if bottomRow >= 0 and (1-selectedImage[bottomRow][column][0]) < lowestEdge:
+            if bottomRow < len(selectedImage) and (1-selectedImage[bottomRow][column][0]) < lowestEdge:
                 lowestEdge = (1-selectedImage[bottomRow][column][0])
                 lowestSide = BOTTOM_SIDE
 
@@ -397,11 +392,11 @@ class imageProcessor:
                     if correspondingFaceImage[rowToSearch][col][3] > 0.0 and (1-correspondingFaceImage[rowToSearch][col][0]) > colMaxes[col]["val"]:
                         colMaxes[col]["val"] = (1-correspondingFaceImage[rowToSearch][col][0])
                         colMaxes[col]["depth"] = rowToSearch
-                        print("Updating at row:", rowToSearch)
+                        #print("Updating at row:", rowToSearch)
                 rowToSearch += rowIncrement
             # Now, we set depthInwardsLowest to be the greatest distance from the edge observed in colMaxes.
             for c in colMaxes:
-                print("colMax:", c)
+                #print("colMax:", c)
                 curDist = abs(c["depth"] - startIndex)
                 if curDist > depthInwardsLowest:
                     depthInwardsLowest = curDist
@@ -423,6 +418,7 @@ class imageProcessor:
         inBounds = lambda coord: coord[0] >= 0 and coord[0] < xLen and coord[1] >= 0 and coord[1] < yLen and coord[2] >= 0 and coord[2] < zLen
         # Lambda for elementwise adding two tuples of length 3
         add = lambda x, y: (x[0] + y[0], x[1] + y[1], x[2] + y[2])
+        constMult = lambda k, vec: (k*vec[0], k*vec[1], k*vec[2])
 
         # Dictionary of "starting positions" for iteration for each face.
         # For each pixel in each face's image, we'll traverse "inwards" through the 3D array.
@@ -437,9 +433,9 @@ class imageProcessor:
             TOP_FACE: (xLen-1,0,zLen-1),
             BOTTOM_FACE: (xLen-1,yLen-1,0)
         }
-
-        self.object3D = numpy.ones(shape=(xLen,yLen,zLen)) # Fill with inside value (1)
-
+        points3D = []
+        #self.object3D = numpy.ones(shape=(xLen,yLen,zLen)) # Fill with inside value (1)
+        print("Array initialized.")
         # We'll do two phases.
         # First, we'll do all "definitive" cells, with alpha values zero or one.
         # Then, we'll do all partial-alpha cells IF there's no conflict.
@@ -454,17 +450,17 @@ class imageProcessor:
                 lowestEdgeCellDepth = self.depthDictionary[face]["lowestEdgeCellDepth"]
                 depthRange = highestFloat - lowestEdgeFloat
                 if depthRange <= 0:
+                    # The actual logic happens deeper inside the while loop. Look for it below, marked with "#updateme"
                     print("REMINDER: ALLOW USER-INPUT MODIFICATION FOR CASE WHERE DEPTH RANGE MAPPING CANNOT BE AUTOMATICALLY DETERMINED!")
                     print("SETTING ALL VALUES TO 'MAX' AS TEMPORARY DEFAULT!")
-                    # The actual logic happens deeper inside the while loop. Look for it below, marked with "#updateme"
                 index = startDict[face] # Convert into list so that it's mutable
-                
                 while inBounds(index):
                     refIndexHoriz = index # Save current index before the "vert" and "inwards" coords are altered
                     while inBounds(index):
                         refIndexVert = index # Save current index before the "inwards" coord is altered
                         depth = 0
-                        pixelVal = self.images2D[face][pixelXIndex][pixelYIndex]
+                        
+                        pixelVal = self.images2D[face][pixelYIndex][pixelXIndex]
                         # The "1 - " is to represent the higher, darker pixels with higher/larger floats, to be consistent with other parts of this code
                         pixelHeight = 1-pixelVal[0]
                         pixelAlpha = pixelVal[3]
@@ -472,18 +468,30 @@ class imageProcessor:
                             #updateme
                             depthCap = highestCellDepth
                         else:
-                            depthCap = ((highestFloat-pixelHeight)*lowestEdgeCellDepth + (pixelHeight - lowestEdgeFloat)*highestCellDepth)/depthRange
+                            depthCap = round(((highestFloat-pixelHeight)*lowestEdgeCellDepth + (pixelHeight - lowestEdgeFloat)*highestCellDepth)/depthRange)
+                        if pixelAlpha > 0:
+                            #print("index:", index)
+                            #print("depthCap:", depthCap)
+                            depthToTraverse = constMult(depthCap, iteration3D_Dictionary[face]["inwards"])
+                            #print("depthToTraverse:", depthToTraverse)
+                            cubeIndex = add(index, depthToTraverse)
+                            #print("CubeIndex:", cubeIndex)
+                            points3D.append(cubeIndex)
+                            #print("\n][][][][][\n")
+                        '''
                         # Alpha check
                         if pixelAlpha == 1 and phase == 0:
                             while inBounds(index) and depth < depthCap:
-                                self.object3D[index] = -1 # OUTSIDE = -1
+                                if self.object3D[index] == 1:
+                                    self.object3D[index] = -1 # OUTSIDE = -1
                                 index = add(index, iteration3D_Dictionary[face]["inwards"])
                                 depth += 1
-                            if inBounds(index) and self.object3D[index] == 1:
+                            if inBounds(index):
                                 self.object3D[index] = 0 # BOUNDARY = 0
                         elif pixelAlpha == 0 and phase == 0:
                             while inBounds(index):
-                                self.object3D[index] = -1 # OUTSIDE = -1
+                                if self.object3D[index] == 1:
+                                    self.object3D[index] = -1 # OUTSIDE = -1
                                 index = add(index, iteration3D_Dictionary[face]["inwards"])
                         elif pixelAlpha != 0 and pixelAlpha != 1 and phase == 1:
                             while inBounds(index) and depth < depthCap:
@@ -495,6 +503,7 @@ class imageProcessor:
                             # Make sure we don't overwrite a "definitive" value from first phase
                             if inBounds(index) and self.object3D[index] == 1:
                                 self.object3D[index] = 0 # BOUNDARY = 0
+                        '''
                         # reset "inwards" and increment "vert"
                         index = add(refIndexVert, iteration3D_Dictionary[face]["vertical"])
                         pixelYIndex += 1
@@ -502,6 +511,10 @@ class imageProcessor:
                     index = add(refIndexHoriz, iteration3D_Dictionary[face]["horizontal"])
                     pixelXIndex += 1
                     pixelYIndex = 0
+                    #print("Done a slice.")
+                print("Done one face.")
+            print("Done one phase.")
+        self.points3D = numpy.array(points3D)
         return
 
 
@@ -509,15 +522,14 @@ class imageProcessor:
 
 if __name__ == "__main__":
     # Test function
-    TEST_IMAGE_PATH_PREFIX = "lowres\\sphere_"
+    TEST_IMAGE_PATH_PREFIX = "LightPathDistance\\Torus\\" #"lowres\\ch_"
     TEST_IMAGE_PATH_SUFFIX = ".png"
-    image = imageProcessor(TEST_IMAGE_PATH_PREFIX, TEST_IMAGE_PATH_SUFFIX)
-    for face in FACES:
-        print("Face info for face", face, ":")
-        d = image.depthDictionary[face]
-        print("highestFloat:", d["highestFloat"], "\nhighestCellDepth:", d["highestCellDepth"], "\nlowestEdgeFloat:", d["lowestEdgeFloat"], "\nlowestEdgeCellDepth:", d["lowestEdgeCellDepth"])
-        print()
-    print("Printing slices along the x-axis")
+    imageNames = []
+    for i in range(6):
+        imageNames.append(os.path.join(IMAGES_DIR, TEST_IMAGE_PATH_PREFIX + str(i) + TEST_IMAGE_PATH_SUFFIX))
+    image = imageProcessor(imageNames)
+    
+    '''print("Printing slices along the x-axis")
     for x in range(image.xLen):
         print("Slice for x =", x)
         print("==================")
@@ -531,5 +543,5 @@ if __name__ == "__main__":
                     printVal = " " 
                 print(printVal, end=" ")
             print("\n-----------------")
-        print("\n")
+        print("\n")'''
     print("Done imageProcessing.py test.")

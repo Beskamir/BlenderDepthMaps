@@ -41,6 +41,11 @@ class OBJECT_PT_depthMapsUI_Panel(Panel):
 
         layout.operator("depthmaps.clear_depth_maps")
         propsToSet.front_face_file = currentProps.front_face_file
+        propsToSet.left_face_file = currentProps.left_face_file
+        propsToSet.back_face_file = currentProps.back_face_file
+        propsToSet.right_face_file = currentProps.right_face_file
+        propsToSet.top_face_file = currentProps.top_face_file
+        propsToSet.bottom_face_file = currentProps.bottom_face_file
         
         '''print("\n\nPROPS:")
         for attr in dir(context.active_object.data):
