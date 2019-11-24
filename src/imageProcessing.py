@@ -106,8 +106,15 @@ iteration3D_Dictionary = {
 
 
 class imageProcessor:
+    # maxWidth is not actually used at the moment, but I plan to do something with it if there's time later.
     def __init__(self, pathPrefix, pathSuffix, maxWidth=1024):
-        self.createArrays(pathPrefix, pathSuffix, maxWidth)
+        self.pathPrefix = pathPrefix
+        self.pathSuffix = pathSuffix
+        print("Creating")
+        #self.createArrays(pathPrefix, pathSuffix, maxWidth)
+
+    def testPrint(self):
+        print("IMPORT WORKS:", self.pathPrefix, self.pathSuffix)
 
     # Blender stores images as 1D arrays, ordered as described in https://blender.stackexchange.com/questions/13422/crop-image-with-python-script/13516#13516
     # This function generates a 2D array of (r,g,b,a) tuples from said 1D list
@@ -139,6 +146,7 @@ class imageProcessor:
         raise NotImplementedError
         return
 
+    # maxWidth is not actually used at the moment, but I plan to do something with it if there's time later.
     def createArrays(self, pathPrefix, pathSuffix, maxWidth=1024):
         self.pathPrefix = pathPrefix
         self.pathSuffix = pathSuffix

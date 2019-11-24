@@ -7,7 +7,7 @@ def imagesToVoxels(image3D):
     for xValue in range(len(image3D)):
         for yValue in range(len(image3D[xValue])):
             for zValue in range(len(image3D[xValue][yValue])):
-                if(image3D[xValue][yValue][zValue]==1):
+                if(image3D[xValue][yValue][zValue]==0):
                     createVoxel((xValue,yValue,zValue))
 
 # place a voxel at a given position, using mesh.primitive_cube_add is really slow so it might be worth making this faster 
@@ -28,7 +28,7 @@ if __name__ == "__main__":
         for y in range(10):
             zArray = []
             for z in range(10):
-                zArray.append(1)
+                zArray.append(0)
                 # zArray.append(randint(0,1))
             yArray.append(zArray)
         testImageArray.append(yArray)
