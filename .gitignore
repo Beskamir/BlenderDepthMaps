@@ -111,3 +111,6 @@ venv.bak/
 
 images/**/*.jpg
 images/**/*.png
+
+# Added to .gitignore because it uses a variable that will need to be set by each user for their own individual device.
+./runFromBlender.py
