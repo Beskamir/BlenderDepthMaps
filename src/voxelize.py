@@ -18,17 +18,44 @@ def pointsToVoxels(points, name="VoxelMesh"):
     #                     0          1       2         3         4         5       6        7
     block=numpy.array([ [-1,-1,-1],[-1,-1,1],[-1,1,-1],[-1,1,1],[1,-1,-1],[1,-1,1],[1,1,-1],[1,1,1]]).astype(float)
     block*=0.5
-    verts = numpy.empty(shape=(0,3))
+
     print("Creating vertices...")
-    for pt in points:
-        #print((block+i).shape)
-        verts=numpy.append(verts, (block+pt),axis=0)
-        
+    # Function to apply each point to each element of "block" as efficiently as possible
+    # First, produce 8 copies of each point. numpy.tile() is apparently the most efficient way to do so.
+    pointsTiled = numpy.tile(points, (1,8))
+    # This will make each tuple 24 items long. To fix this, we need to reshape pointsTiled, and split each 24-long tuple into 8 3-longs.
+    pointsDuplicated = numpy.reshape(pointsTiled, (pointsTiled.shape[0], 8, 3))
+    # Then, a lambda to piecewise add the elements of "block" to a respective set of 8 duplicate points in pointsDuplicated
+    blockerize = lambda x : x + block
+    # Apply it
+    pointsBlockerized = blockerize(pointsDuplicated)
+    # pointsBlockerized is now a 2D array of thruples. Convert back to a 1D array.
+    verts = numpy.reshape(pointsBlockerized, (pointsBlockerized.shape[0]*pointsBlockerized.shape[1], 3) )
+    #print("points shape:", points.shape)
+    #print("verts shape:", verts.shape)
+    #print("verts:", verts)
+
+    '''for pt in points:
+        print((block+pt))
+        verts=numpy.append(verts, (block+pt),axis=0)'''
+    
+    printAfterCount = 100000
+    nextThreshold = 0
+    pointsDone = 0
     print(verts)
     for v in verts:
         bm.verts.new(v)
+        pointsDone += 1
+        if pointsDone > nextThreshold:
+            print(pointsDone, "points have been vertexed so far.")
+            nextThreshold += printAfterCount
+    print("Calling to_mesh().")
     bm.to_mesh(mesh)
+    print("Ensuring lookup table.")
     bm.verts.ensure_lookup_table()
+
+    nextThreshold = 0
+    pointsDone = 0
     for i in range(0,len(bm.verts),8):
         bm.faces.new( [bm.verts[i+0], bm.verts[i+1],bm.verts[i+3], bm.verts[i+2]])
         bm.faces.new( [bm.verts[i+4], bm.verts[i+5],bm.verts[i+1], bm.verts[i+0]])
@@ -36,6 +63,10 @@ def pointsToVoxels(points, name="VoxelMesh"):
         bm.faces.new( [bm.verts[i+2], bm.verts[i+3],bm.verts[i+7], bm.verts[i+6]])
         bm.faces.new( [bm.verts[i+5], bm.verts[i+7],bm.verts[i+3], bm.verts[i+1]]) #top
         bm.faces.new( [bm.verts[i+0], bm.verts[i+2],bm.verts[i+6], bm.verts[i+4]]) #bottom
+        pointsDone += 1
+        if pointsDone > nextThreshold:
+            print(pointsDone, "points have been cubed so far.")
+            nextThreshold += printAfterCount
     if bpy.context.mode == 'EDIT_MESH':
         bmesh.update_edit_mesh(obj.data)
     else:

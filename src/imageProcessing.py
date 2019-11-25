@@ -515,6 +515,7 @@ class imageProcessor:
                 print("Done one face.")
             print("Done one phase.")
         self.points3D = numpy.array(points3D)
+        self.points3D = numpy.unique(self.points3D, axis=0)
         return
 
 
