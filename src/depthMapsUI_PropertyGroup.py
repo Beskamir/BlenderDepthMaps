@@ -51,16 +51,19 @@ class depthMapsUI_PropertyGroup(PropertyGroup):
                 # A more sophisticated search would also handle cases for which option[0] appears multiple times in the file's name,
                 # but time should be devoted to more important tasks at the moment.
                 pattern = r"^(?P<prefix>.*)" + re.escape(option[0]) + r"(?P<suffix>[^\\/]+)$"
-                filenameMatch = re.match(pattern, value)
+                filenameMatch = re.match(pattern, value, flags=re.DOTALL)
                 # If we get a match, we generate our guesses
                 if filenameMatch != None:
-                    prefix = filenameMatch.group("prefix")
+                    prefixToSearch = prefix = filenameMatch.group("prefix")
+                    if prefix[0:2] == "//":
+                        prefixToSearch = "./" + prefix[2:]
                     suffix = filenameMatch.group("suffix")
                     guess = []
                     allGuessesExist = True
                     for i in range(5):
                         guess.append(prefix + option[i+1] + suffix)
-                        if not path.exists(guess[i]):
+                        guessToSearch = prefixToSearch + option[i+1] + suffix
+                        if not path.exists(guessToSearch):
                             allGuessesExist = False
 
                     # If all of the guesses are valid, then we update the other file names with them

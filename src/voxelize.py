@@ -42,7 +42,7 @@ def pointsToVoxels(points, name="VoxelMesh"):
     printAfterCount = 100000
     nextThreshold = 0
     pointsDone = 0
-    print(verts)
+    #print(verts)
     for v in verts:
         bm.verts.new(v)
         pointsDone += 1
