@@ -7,6 +7,8 @@ Fix the indexing error occurring in the spoon test case.
 
 Image scaling.
 
+Once the 3D-point-array-generating function works, try to optimize it a bit more.
+
 =======================================
 
 NURBS fitting and/or marching cubes.
