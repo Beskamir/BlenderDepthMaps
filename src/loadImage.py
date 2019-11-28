@@ -49,8 +49,8 @@ class loadImage:
                 g = pixels[index+1]
                 b = pixels[index+2]
                 a = pixels[index+3]
-                # Apparently, in blender images, lower alpha -> "darker"
-                if a > 0:
+                # Apparently, some images have "pre-multiplied" alphas...
+                if a > 0 and blenderImage.alpha_mode == "PREMUL":
                     r = r/a
                     g = g/a
                     b = b/a
@@ -65,7 +65,7 @@ class loadImage:
         for row in xyImageContents:
             for pixel in row:
                 (r,g,b,a) = pixel
-                if a > 0:
+                if a > 0 and blendImage.alpha_mode == "PREMUL":
                     r *= a
                     g *= a
                     b *= a

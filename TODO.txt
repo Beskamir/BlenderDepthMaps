@@ -1,0 +1,27 @@
+Colour-coding the different faces' voxels for ease of debugging.\
+
+Figure out why the ranges for certain concave images are wrong.
+    Start by printing out the lowest-edge pixel and its location, as well as the "matching" pixel in the neighbour image and its location.
+
+Fix the indexing error occurring in the spoon test case.
+
+Image scaling.
+
+=======================================
+
+NURBS fitting and/or marching cubes.
+
+Deal with images at different scales from one another, etc.
+
+Stretch goals:
+    Machine learning and depth map generation?
+
+    Deal with images that are at slight angles compared to environment and/or each other.
+
+    How to "convert" perspective IRL images to orthographic? Even if it's just ignoring regions for now, or trying to scale them, etc.
+    TBH that'd be tough and would probably take more than a semester to get perfect.
+
+    Semi-automated/sketch tool for starting from normal images?
+
+
+
