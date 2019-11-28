@@ -10,7 +10,7 @@ import os
 import sys
  
 # This field needs to be customized depending on the add-on's location on your device
-filesDir = "C:/Program Files/Blender Foundation/Blender/2.80/scripts/addons/BlenderDepthMaps/src"
+filesDir = "../src"
  
 initFile = "__init__.py" 
  
