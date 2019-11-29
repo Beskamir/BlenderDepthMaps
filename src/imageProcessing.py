@@ -300,6 +300,8 @@ class imageProcessor:
         # Set default/starting values for the info to keep track of
         lowestEdge = 1.0
         lowestSide = TOP_SIDE # Random default; could have just as well been LEFT, RIGHT, or BOTTOM_SIDE.
+        lowestEdgeLoc = (-1,-1) # for debugging
+        lowestEdgePixel = (-1,-1,-1,-1) # for debugging
         # First, the left and right sides are tested.
         # (We also do checks on indices in case we somehow, in spite of prior cropping, end up with an all-transparent row)
         for row in range(len(selectedImage)):
@@ -313,9 +315,13 @@ class imageProcessor:
             if leftColumn < len(selectedImage[row]) and (1-selectedImage[row][leftColumn][0]) < lowestEdge:
                 lowestEdge = (1-selectedImage[row][leftColumn][0])
                 lowestSide = LEFT_SIDE
+                lowestEdgeLoc = (leftColumn,len(selectedImage)-1-row)
+                lowestEdgePixel = selectedImage[row][leftColumn]
             if rightColumn >= 0 and (1-selectedImage[row][rightColumn][0]) < lowestEdge:
                 lowestEdge = (1-selectedImage[row][rightColumn][0])
                 lowestSide = RIGHT_SIDE
+                lowestEdgeLoc = (rightColumn,len(selectedImage)-1-row)
+                lowestEdgePixel = selectedImage[row][rightColumn]
         # Then, the top and bottom sides are tested.
         # (We also do checks on indices in case we somehow, in spite of prior cropping, end up with an all-transparent column)
         for column in range(len(selectedImage[0])):
@@ -329,10 +335,17 @@ class imageProcessor:
             if topRow >= 0 and (1-selectedImage[topRow][column][0]) < lowestEdge:
                 lowestEdge = (1-selectedImage[topRow][column][0])
                 lowestSide = TOP_SIDE
+                lowestEdgeLoc = (column,len(selectedImage)-1-topRow)
+                lowestEdgePixel = selectedImage[topRow][column]
             if bottomRow < len(selectedImage) and (1-selectedImage[bottomRow][column][0]) < lowestEdge:
                 lowestEdge = (1-selectedImage[bottomRow][column][0])
                 lowestSide = BOTTOM_SIDE
-
+                lowestEdgeLoc = (column,len(selectedImage)-1-bottomRow)
+                lowestEdgePixel = selectedImage[bottomRow][column]
+        print("\nCURRENT FACE:", selectedFace)
+        print("location:", lowestEdgeLoc)
+        print("whole pixel:", lowestEdgePixel)
+        print("lowestSide:", lowestSide)
         # Then, from THE "side" reference image corresponding to the "lowestEdge" pixel's value
         #   This is, as may be expected, the most complicated part.
         #   We will have to approach it as follows:
@@ -348,6 +361,8 @@ class imageProcessor:
         correspondingFaceImage = self.images2D[correspondingFace]
         correspondingSide = BORDER_DICTIONARY[selectedFace][lowestSide]["side"]
         depthInwardsLowest = 0
+        lowestRefLoc = (-1,-1) # for debugging
+        lowestRefPixel = (-1,-1,-1,-1) # for debugging
         # First, we handle the case for when correspondingSide is LEFT or RIGHT 
         if correspondingSide == LEFT_SIDE or correspondingSide == RIGHT_SIDE:
             print("LEFT/RIGHT for face", selectedFace)
@@ -359,20 +374,27 @@ class imageProcessor:
             print("INCREMENT:", colIncrement)
             columnToSearch = startIndex
             # This array will keep track of the max height found in each row, and where it is.
-            rowMaxes = [ { "val": 0.0, "depth":startIndex } ] * len(correspondingFaceImage)
+            rowMaxes = []
+            for i in range(len(correspondingFaceImage)):
+                rowMaxes.append({ "val": -10000.0, "depth":startIndex, "debugPixel":(-1,-1,-1,-1) })
             # Search column-by-column until we find something opaque.
             while columnToSearch in range(len(correspondingFaceImage[0])):
                 for row in range(len(correspondingFaceImage)):
                     # Alpha check & comparing with current max
                     if correspondingFaceImage[row][columnToSearch][3] > 0.0 and (1-correspondingFaceImage[row][columnToSearch][0]) > rowMaxes[row]["val"]:
                         rowMaxes[row]["val"] = (1-correspondingFaceImage[row][columnToSearch][0])
+                        rowMaxes[row]["debugPixel"] = correspondingFaceImage[row][columnToSearch]
                         rowMaxes[row]["depth"] = columnToSearch
                 columnToSearch += colIncrement
             # Now, we set depthInwardsLowest to be the greatest distance from the edge observed in rowMaxes.
-            for r in rowMaxes:
+            for rNum in range(len(rowMaxes)):
+                r = rowMaxes[rNum]
                 curDist = abs(r["depth"] - startIndex)
                 if curDist > depthInwardsLowest:
                     depthInwardsLowest = curDist
+                    lowestRefLoc = (r["depth"], rNum)
+                    lowestRefPixel = r["debugPixel"]
+
         # THEN, we handle the case for when correspondingSide is TOP or BOTTOM
         else:
             print("TOP/BOTTOM for face", selectedFace)
@@ -381,25 +403,37 @@ class imageProcessor:
             if correspondingSide == TOP_SIDE:
                 startIndex = len(correspondingFaceImage)-1
                 rowIncrement = -1
-            print("INCREMENT:", rowIncrement)
+            print("INCREMENT:", rowIncrement, "; START_INDEX:", startIndex)
             rowToSearch = startIndex
             # This array will keep track of the max height found in each column, and where it is.
-            colMaxes = [ { "val": 0.0, "depth":startIndex } ] * len(correspondingFaceImage[0])
+            colMaxes = []
+            for i in range(len(correspondingFaceImage[0])):
+                colMaxes.append({ "val": -10000.0, "depth":startIndex, "debugPixel":(-1,-1,-1,-1) })
             # Search row-by-row until we find something opaque.
             while rowToSearch in range(len(correspondingFaceImage)):
                 for col in range(len(correspondingFaceImage[0])):
                     # Alpha check & comparing with current max
                     if correspondingFaceImage[rowToSearch][col][3] > 0.0 and (1-correspondingFaceImage[rowToSearch][col][0]) > colMaxes[col]["val"]:
                         colMaxes[col]["val"] = (1-correspondingFaceImage[rowToSearch][col][0])
+                        colMaxes[col]["debugPixel"] = correspondingFaceImage[rowToSearch][col]
                         colMaxes[col]["depth"] = rowToSearch
                         #print("Updating at row:", rowToSearch)
                 rowToSearch += rowIncrement
             # Now, we set depthInwardsLowest to be the greatest distance from the edge observed in colMaxes.
-            for c in colMaxes:
-                #print("colMax:", c)
+            for cNum in range(len(colMaxes)):
+                c = colMaxes[cNum]
+                ccopy = c.copy()
+                print("colMax:", ccopy)
                 curDist = abs(c["depth"] - startIndex)
                 if curDist > depthInwardsLowest:
                     depthInwardsLowest = curDist
+                    lowestRefLoc = (cNum, c["depth"])
+                    lowestRefPixel = c["debugPixel"]
+        print("ref location:", lowestRefLoc, "out of", (len(correspondingFaceImage[0]), len(correspondingFaceImage)))
+        print("whole ref pixel:", lowestRefPixel)
+        print("Reference: face =", correspondingFace, ", side =", correspondingSide)
+        print()
+
         self.depthDictionary[selectedFace] = {
             "highestFloat": highest,
             "highestCellDepth": depthInwardsHighest,
