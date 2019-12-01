@@ -4,9 +4,15 @@ import numpy
 from random import randint 
 import time
 
-# pointsToVoxels modified slightly from generate_blocks() in https://github.com/cagcoach/BlenderPlot/blob/master/blendplot.py
-# Some changes to accomodate Blender 2.8's API changes were made.
+# pointsToVoxels modified from generate_blocks() in https://github.com/cagcoach/BlenderPlot/blob/master/blendplot.py
+# Some changes to accomodate Blender 2.8's API changes were made, 
+# and the function has been made much more efficient through creative usage of numpy.
 def pointsToVoxels(points, name="VoxelMesh"):
+    # For now, we'll combine the voxels from each of the six views into one array and then just take the unique values.
+    # Later on, this could be re-structured to, for example, render the voxels from each face in a separate colour
+    points = numpy.concatenate(tuple(points.values()))
+    points = numpy.unique(points, axis=0)
+
     print("Number of points:", len(points))
     mesh = bpy.data.meshes.new("mesh")  # add a new mesh
     obj = bpy.data.objects.new(name, mesh)
@@ -16,7 +22,7 @@ def pointsToVoxels(points, name="VoxelMesh"):
     mesh = obj.data
     bm = bmesh.new()
     #                     0          1       2         3         4         5       6        7
-    block=numpy.array([ [-1,-1,-1],[-1,-1,1],[-1,1,-1],[-1,1,1],[1,-1,-1],[1,-1,1],[1,1,-1],[1,1,1]]).astype(float)
+    block=numpy.array([ [-1,-1,-1],[-1,-1,1],[-1,1,-1],[-1,1,1],[1,-1,-1],[1,-1,1],[1,1,-1],[1,1,1] ]).astype(float)
     block*=0.5
 
     print("Creating vertices...")
@@ -31,6 +37,7 @@ def pointsToVoxels(points, name="VoxelMesh"):
     pointsBlockerized = blockerize(pointsDuplicated)
     # pointsBlockerized is now a 2D array of thruples. Convert back to a 1D array.
     verts = numpy.reshape(pointsBlockerized, (pointsBlockerized.shape[0]*pointsBlockerized.shape[1], 3) )
+    
     #print("points shape:", points.shape)
     #print("verts shape:", verts.shape)
     #print("verts:", verts)

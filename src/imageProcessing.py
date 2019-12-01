@@ -153,14 +153,27 @@ class imageProcessor:
         return
     
     def cropImages(self):
-        self.images2D = []
+        self.images2D = {}
         for i in FACES:
             # Load the image
             filename = self.originalFilenames[i]
             print("Loading:",filename)
             image = self.imageLoader.openImage(filename)
+            #print(image)
             print("---------\n"+filename, "has been converted into a 2D array.")
             # Crop the 2D-list "image" to remove all-alpha border regions
+            # Also, store the number of alpha pixels that buffer each row/column for use in a later stage.
+            alphas = image[:,:,3]
+            # Sum the alphas for each column; if the sum == 0, then the entire column is transparent.
+            colSum = alphas.sum(axis=0)
+            # Same for rows
+
+            '''self.alphas = {}
+            self.alphas[LEFT_SIDE] = np.empty(len(image))
+            self.alphas[RIGHT_SIDE] = np.empty(len(image))
+            self.alphas[TOP_SIDE] = np.empty(len(image[0]))'''
+
+
             # LEFT
             cropLeft = 0
             foundPosAlpha = False
@@ -209,8 +222,8 @@ class imageProcessor:
                     break
                 else:
                     cropBottom += 1
-            image = [image[i][cropLeft:cropRight+1] for i in range(cropBottom,cropTop+1)] 
-            self.images2D.append(image)
+            image = image[cropBottom:cropTop+1,cropLeft:cropRight+1] 
+            self.images2D[i] = image
             print(i, "---------------------")
             print("cropLeft:", cropLeft)
             print("cropRight:", cropRight)
@@ -224,9 +237,9 @@ class imageProcessor:
                     else:
                         print(pixel[0], end=", ")
                 print("\n_ _ _ _ _ _ _")'''
-        self.xLen = len(self.images2D[TOP_FACE])
-        self.yLen = len(self.images2D[FRONT_FACE][0])
-        self.zLen = len(self.images2D[FRONT_FACE])
+        self.xLen = self.images2D[TOP_FACE].shape[0]
+        self.yLen = self.images2D[FRONT_FACE].shape[1]
+        self.zLen = self.images2D[FRONT_FACE].shape[0]
 
         return
         
@@ -422,8 +435,6 @@ class imageProcessor:
             # Now, we set depthInwardsLowest to be the greatest distance from the edge observed in colMaxes.
             for cNum in range(len(colMaxes)):
                 c = colMaxes[cNum]
-                ccopy = c.copy()
-                print("colMax:", ccopy)
                 curDist = abs(c["depth"] - startIndex)
                 if curDist > depthInwardsLowest:
                     depthInwardsLowest = curDist
@@ -447,6 +458,7 @@ class imageProcessor:
         zLen = self.zLen
         yLen = self.yLen
         xLen = self.xLen
+        '''
 
         # A quick "in bounds" function that states whether a coordinate is within the dimensions of our 3D array.
         inBounds = lambda coord: coord[0] >= 0 and coord[0] < xLen and coord[1] >= 0 and coord[1] < yLen and coord[2] >= 0 and coord[2] < zLen
@@ -467,89 +479,176 @@ class imageProcessor:
             TOP_FACE: (xLen-1,0,zLen-1),
             BOTTOM_FACE: (xLen-1,yLen-1,0)
         }
-        points3D = []
-        #self.object3D = numpy.ones(shape=(xLen,yLen,zLen)) # Fill with inside value (1)
-        print("Array initialized.")
         # We'll do two phases.
         # First, we'll do all "definitive" cells, with alpha values zero or one.
         # Then, we'll do all partial-alpha cells IF there's no conflict.
-        for phase in range(2):
-            # March, for each pixel on each "face" of the surrounding cube, inwards and replace 1's with 0's (edge) and -1's (outside) values wherever alpha is strictly 0 or 1.
-            for face in FACES:
-                pixelXIndex = 0
-                pixelYIndex = 0
-                highestFloat = self.depthDictionary[face]["highestFloat"]
-                lowestEdgeFloat = self.depthDictionary[face]["lowestEdgeFloat"]
-                highestCellDepth = self.depthDictionary[face]["highestCellDepth"]
-                lowestEdgeCellDepth = self.depthDictionary[face]["lowestEdgeCellDepth"]
-                depthRange = highestFloat - lowestEdgeFloat
-                if depthRange <= 0:
-                    # The actual logic happens deeper inside the while loop. Look for it below, marked with "#updateme"
-                    print("REMINDER: ALLOW USER-INPUT MODIFICATION FOR CASE WHERE DEPTH RANGE MAPPING CANNOT BE AUTOMATICALLY DETERMINED!")
-                    print("SETTING ALL VALUES TO 'MAX' AS TEMPORARY DEFAULT!")
-                index = startDict[face] # Convert into list so that it's mutable
+        # March, for each pixel on each "face" of the surrounding cube, inwards and replace 1's with 0's (edge) and -1's (outside) values wherever alpha is strictly 0 or 1.
+        '''
+
+        structureInfo = {
+            FRONT_FACE: {
+                "depthAxisLen":  xLen,
+                "axisPermutation": (2,0,1)
+            },
+            LEFT_FACE: {
+                "depthAxisLen":  yLen,
+                "axisPermutation": (0,2,1)
+            },
+            BACK_FACE: {
+                "depthAxisLen":  xLen,
+                "axisPermutation": (2,0,1)
+            },
+            RIGHT_FACE: {
+                "depthAxisLen":  yLen,
+                "axisPermutation": (0,2,1)
+            },
+            TOP_FACE: {
+                "depthAxisLen":  zLen,
+                "axisPermutation": (1,0,2)
+            },
+            BOTTOM_FACE: {
+                "depthAxisLen":  zLen,
+                "axisPermutation": (1,0,2)
+            }
+        }
+
+        self.points3D = {} 
+        print("Array initialized.")
+        for face in FACES:
+            image = self.images2D[face]
+            # Get an array of indices
+            # iList[0] will contain the row indices, while iList[1] will contain the column indices
+            iList = numpy.indices((image.shape[0], image.shape[1]))
+            rowIndices = iList[0]
+            colIndices = iList[1]
+
+            # "flip" the indices if necessary, depending on which face we're viewing them from
+            if face == BACK_FACE or face == RIGHT_FACE or face == BOTTOM_FACE:
+                imageWidth = image.shape[1]
+                horizFlip = lambda x: imageWidth - 1 - x
+                colIndices = horizFlip(colIndices)
+            if face == TOP_FACE or face == BOTTOM_FACE:
+                imageHeight = image.shape[0]
+                vertFlip = lambda y: imageHeight - 1 - y
+                rowIndices = vertFlip(rowIndices)
+
+            highestFloat = self.depthDictionary[face]["highestFloat"]
+            lowestEdgeFloat = self.depthDictionary[face]["lowestEdgeFloat"]
+            highestCellDepth = self.depthDictionary[face]["highestCellDepth"]
+            lowestEdgeCellDepth = self.depthDictionary[face]["lowestEdgeCellDepth"]
+            depthRange = highestFloat - lowestEdgeFloat
+            if depthRange == 0.0:
+                print("REMINDER: ALLOW USER-INPUT MODIFICATION FOR CASE WHERE DEPTH RANGE MAPPING CANNOT BE AUTOMATICALLY DETERMINED!")
+                print("SETTING DEFAULT DEPTH RANGE AS TEMPORARY DEFAULT!")
+                depthRange = 1.0
+
+            depthify = lambda pixelHeight: ((highestFloat-(1-pixelHeight))*lowestEdgeCellDepth + ((1-pixelHeight) - lowestEdgeFloat)*highestCellDepth)/depthRange
+            depths = depthify(image[:,:,0])
+            depths = depths.round()
+
+            alphas = image[:,:,3]
+            visibles = numpy.nonzero(alphas)
+
+            # May also need to "flip" this depth image
+            if face == FRONT_FACE or face == RIGHT_FACE or face == TOP_FACE:
+                imageDepth = structureInfo[face]["depthAxisLen"]
+                print("Image depth for face", face, ":", imageDepth)
+                print("Max:", numpy.max(depths[visibles]))
+                print("Min:", numpy.min(depths[visibles]))
+                depthFlip = lambda d: imageDepth - 1 - d
+                depths = depthFlip(depths)
+
+            coordLists = [colIndices,rowIndices,depths]
+            permutation = structureInfo[face]["axisPermutation"]
+            reorderedCoordLists = (coordLists[permutation[0]], coordLists[permutation[1]], coordLists[permutation[2]])
+            # Now stack to create a list containing elements of the form (rowIndex, colIndex, height, alpha)
+            
+            '''print("Image shape:", image.shape)
+            print("x shape:", coordLists[permutation[0]].shape)
+            print("y shape:", coordLists[permutation[1]].shape)
+            print("z shape:", coordLists[permutation[2]].shape)
+            print("alpha shape:", image[:,:,3].shape)'''
+
+            stackedList = numpy.stack(reorderedCoordLists, axis=-1)
+            
+            pointsList = stackedList[visibles]
+            
+            '''
+
+            pixelXIndex = 0
+            pixelYIndex = 0
+
+            if depthRange <= 0:
+                # The actual logic happens deeper inside the while loop. Look for it below, marked with "#updateme"
+                print("REMINDER: ALLOW USER-INPUT MODIFICATION FOR CASE WHERE DEPTH RANGE MAPPING CANNOT BE AUTOMATICALLY DETERMINED!")
+                print("SETTING ALL VALUES TO 'MAX' AS TEMPORARY DEFAULT!")
+            index = startDict[face] # Convert into list so that it's mutable
+
+            while inBounds(index):
+                refIndexHoriz = index # Save current index before the "vert" and "inwards" coords are altered
                 while inBounds(index):
-                    refIndexHoriz = index # Save current index before the "vert" and "inwards" coords are altered
-                    while inBounds(index):
-                        refIndexVert = index # Save current index before the "inwards" coord is altered
-                        depth = 0
-                        
-                        pixelVal = self.images2D[face][pixelYIndex][pixelXIndex]
-                        # The "1 - " is to represent the higher, darker pixels with higher/larger floats, to be consistent with other parts of this code
-                        pixelHeight = 1-pixelVal[0]
-                        pixelAlpha = pixelVal[3]
-                        if depthRange == 0:
-                            #updateme
-                            depthCap = highestCellDepth
-                        else:
-                            depthCap = round(((highestFloat-pixelHeight)*lowestEdgeCellDepth + (pixelHeight - lowestEdgeFloat)*highestCellDepth)/depthRange)
-                        if pixelAlpha > 0:
-                            #print("index:", index)
-                            #print("depthCap:", depthCap)
-                            depthToTraverse = constMult(depthCap, iteration3D_Dictionary[face]["inwards"])
-                            #print("depthToTraverse:", depthToTraverse)
-                            cubeIndex = add(index, depthToTraverse)
-                            #print("CubeIndex:", cubeIndex)
-                            points3D.append(cubeIndex)
-                            #print("\n][][][][][\n")
-                        '''
-                        # Alpha check
-                        if pixelAlpha == 1 and phase == 0:
-                            while inBounds(index) and depth < depthCap:
-                                if self.object3D[index] == 1:
-                                    self.object3D[index] = -1 # OUTSIDE = -1
-                                index = add(index, iteration3D_Dictionary[face]["inwards"])
-                                depth += 1
-                            if inBounds(index):
-                                self.object3D[index] = 0 # BOUNDARY = 0
-                        elif pixelAlpha == 0 and phase == 0:
-                            while inBounds(index):
-                                if self.object3D[index] == 1:
-                                    self.object3D[index] = -1 # OUTSIDE = -1
-                                index = add(index, iteration3D_Dictionary[face]["inwards"])
-                        elif pixelAlpha != 0 and pixelAlpha != 1 and phase == 1:
-                            while inBounds(index) and depth < depthCap:
-                                # Make sure we don't overwrite a "definitive" value from first phase
-                                if self.object3D[index] == 1:
-                                    self.object3D[index] = -1 # OUTSIDE = -1
-                                index = add(index, iteration3D_Dictionary[face]["inwards"])
-                                depth += 1
+                    refIndexVert = index # Save current index before the "inwards" coord is altered
+                    depth = 0
+                    
+                    pixelVal = self.images2D[face][pixelYIndex][pixelXIndex]
+                    # The "1 - " is to represent the higher, darker pixels with higher/larger floats, to be consistent with other parts of this code
+                    pixelHeight = 1-pixelVal[0]
+                    pixelAlpha = pixelVal[3]
+                    if depthRange == 0:
+                        #updateme
+                        depthCap = highestCellDepth
+                    else:
+                        depthCap = round(((highestFloat-pixelHeight)*lowestEdgeCellDepth + (pixelHeight - lowestEdgeFloat)*highestCellDepth)/depthRange)
+                    if pixelAlpha > 0:
+                        #print("index:", index)
+                        #print("depthCap:", depthCap)
+                        depthToTraverse = constMult(depthCap, iteration3D_Dictionary[face]["inwards"])
+                        #print("depthToTraverse:", depthToTraverse)
+                        cubeIndex = add(index, depthToTraverse)
+                        #print("CubeIndex:", cubeIndex)
+                        points3D.append(cubeIndex)
+                        #print("\n][][][][][\n")
+            '''
+            '''
+                    # Alpha check
+                    if pixelAlpha == 1 and phase == 0:
+                        while inBounds(index) and depth < depthCap:
+                            if self.object3D[index] == 1:
+                                self.object3D[index] = -1 # OUTSIDE = -1
+                            index = add(index, iteration3D_Dictionary[face]["inwards"])
+                            depth += 1
+                        if inBounds(index):
+                            self.object3D[index] = 0 # BOUNDARY = 0
+                    elif pixelAlpha == 0 and phase == 0:
+                        while inBounds(index):
+                            if self.object3D[index] == 1:
+                                self.object3D[index] = -1 # OUTSIDE = -1
+                            index = add(index, iteration3D_Dictionary[face]["inwards"])
+                    elif pixelAlpha != 0 and pixelAlpha != 1 and phase == 1:
+                        while inBounds(index) and depth < depthCap:
                             # Make sure we don't overwrite a "definitive" value from first phase
-                            if inBounds(index) and self.object3D[index] == 1:
-                                self.object3D[index] = 0 # BOUNDARY = 0
-                        '''
-                        # reset "inwards" and increment "vert"
-                        index = add(refIndexVert, iteration3D_Dictionary[face]["vertical"])
-                        pixelYIndex += 1
-                    # reset "vert" and "inwards" and increment "horiz"
-                    index = add(refIndexHoriz, iteration3D_Dictionary[face]["horizontal"])
-                    pixelXIndex += 1
-                    pixelYIndex = 0
-                    #print("Done a slice.")
-                print("Done one face.")
-            print("Done one phase.")
-        self.points3D = numpy.array(points3D)
-        self.points3D = numpy.unique(self.points3D, axis=0)
+                            if self.object3D[index] == 1:
+                                self.object3D[index] = -1 # OUTSIDE = -1
+                            index = add(index, iteration3D_Dictionary[face]["inwards"])
+                            depth += 1
+                        # Make sure we don't overwrite a "definitive" value from first phase
+                        if inBounds(index) and self.object3D[index] == 1:
+                            self.object3D[index] = 0 # BOUNDARY = 0
+            '''
+            '''
+                    # reset "inwards" and increment "vert"
+                    index = add(refIndexVert, iteration3D_Dictionary[face]["vertical"])
+                    pixelYIndex += 1
+                # reset "vert" and "inwards" and increment "horiz"
+                index = add(refIndexHoriz, iteration3D_Dictionary[face]["horizontal"])
+                pixelXIndex += 1
+                pixelYIndex = 0
+                #print("Done a slice.")
+            '''
+            self.points3D[face] = pointsList
+            print("Done one face.")
+        #self.points3D = numpy.array(points3D)
+        #self.points3D = numpy.unique(self.points3D, axis=0)
         return
 
 
