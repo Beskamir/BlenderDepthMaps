@@ -341,6 +341,7 @@ class imageProcessor:
             spacesValid = spaces[validIndices]
             diffsValid = diffsFromMax[validIndices]
             rangesForThisSide = heightRange * spacesValid / diffsValid
+            rangesForThisSide = rangesForThisSide[rangesForThisSide.nonzero()]
             rangesPerSide.append(rangesForThisSide)
         cellRanges = numpy.concatenate(tuple(rangesPerSide))
         # Remove outliers, which may to happen if a depth range is a quite uniform, flat surface.
