@@ -4,7 +4,7 @@ import numpy
 from random import randint 
 import time
 
-# pointsToVoxels modified from generate_blocks() in https://github.com/cagcoach/BlenderPlot/blob/master/blendplot.py
+# pointsToVoxels() has been modified from the function generate_blocks() in https://github.com/cagcoach/BlenderPlot/blob/master/blendplot.py
 # Some changes to accomodate Blender 2.8's API changes were made, 
 # and the function has been made much more efficient through creative usage of numpy.
 def pointsToVoxels(points, name="VoxelMesh"):
@@ -54,7 +54,7 @@ def pointsToVoxels(points, name="VoxelMesh"):
         bm.verts.new(v)
         pointsDone += 1
         if pointsDone > nextThreshold:
-            print(pointsDone, "points have been vertexed so far.")
+            print(pointsDone, "vertices have been added so far.")
             nextThreshold += printAfterCount
     print("Calling to_mesh().")
     bm.to_mesh(mesh)
@@ -62,7 +62,7 @@ def pointsToVoxels(points, name="VoxelMesh"):
     bm.verts.ensure_lookup_table()
 
     nextThreshold = 0
-    pointsDone = 0
+    cubesDone = 0
     for i in range(0,len(bm.verts),8):
         bm.faces.new( [bm.verts[i+0], bm.verts[i+1],bm.verts[i+3], bm.verts[i+2]])
         bm.faces.new( [bm.verts[i+4], bm.verts[i+5],bm.verts[i+1], bm.verts[i+0]])
@@ -70,9 +70,9 @@ def pointsToVoxels(points, name="VoxelMesh"):
         bm.faces.new( [bm.verts[i+2], bm.verts[i+3],bm.verts[i+7], bm.verts[i+6]])
         bm.faces.new( [bm.verts[i+5], bm.verts[i+7],bm.verts[i+3], bm.verts[i+1]]) #top
         bm.faces.new( [bm.verts[i+0], bm.verts[i+2],bm.verts[i+6], bm.verts[i+4]]) #bottom
-        pointsDone += 1
-        if pointsDone > nextThreshold:
-            print(pointsDone, "points have been cubed so far.")
+        cubesDone += 1
+        if cubesDone > nextThreshold:
+            print(cubesDone, "cubes have been made so far.")
             nextThreshold += printAfterCount
     if bpy.context.mode == 'EDIT_MESH':
         bmesh.update_edit_mesh(obj.data)
