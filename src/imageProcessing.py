@@ -122,36 +122,50 @@ def removeOutliers(arr, modifiedZScoreThreshold=3.5):
     modifiedZs = 0.6745*dev/mad
     return arr[numpy.abs(modifiedZs) <= modifiedZScoreThreshold]
 
+# Marzullo's algorithm, which Keith Marzullo invented for his Ph.D. dissertation in 1984.
+# https://en.wikipedia.org/wiki/Marzullo%27s_algorithm
+# The algorithm finds the "relaxed intersection" that satisfies an optimal number of ranges.
+# An intersection for ALL ranges may be impossible (e.g. some may be completely disjoint), 
+# but Marzullo's algorithm will yield the intersection of as many as possible.
+# 
+# Returns the tuple (bestStart, bestEnd, best)
+#   - bestStart: the start of the interval.
+#   - bestEnd: the end of the interval.
+#   - best: the number of intervals satisfied by this intersection.
+def marzullo(upper, lower):
+
+    # Assign a type of 1 to upper boundaries, -1 to lower boundaries
+    ones = numpy.ones(upper.shape)
+    minusOnes = numpy.full(lower.shape, -1.0)
+    upperTuples = numpy.stack((upper, ones), axis=-1)
+    lowerTuples = numpy.stack((lower, minusOnes), axis=-1)
+
+    # Combine all boundaries, with their types, into a single table of tuples
+    table = numpy.concatenate((upperTuples, lowerTuples))
+
+    # Sorting by "first column" uses an answer by Steve Tjoa to the question "Sorting arrays in NumPy by Column", asked by user248237
+    # Link: https://stackoverflow.com/a/2828121
+    # Accessed Dec. 1, 2019
+    table = table[table[:,0].argsort()]
+
+    # Initialize
+    # count is the number of intervals satisfied if we were to update bestStart and bestEnd for the new offset.
+    # The others are described in the comment at the start of this function
+    best = count = bestStart = bestEnd = 0
+    for i in range(table.shape[0]):
+        count -= table[i][1] # Subtract the type of the boundary from count
+        if count > best:
+            best = count
+            bestStart = table[i][0]
+            bestEnd = table[i+1][0] # Will never go out of bounds, since count>best is impossible for last boundary, which would be of type +1
+    return (bestStart, bestEnd, best) 
+
 
 class imageProcessor:
     # maxWidth is not actually used at the moment, but I plan to do something with it if there's time later.
     def __init__(self, originalFilenames, maxWidth=1024):
         self.imageLoader = loadImage.loadImage()
         self.createArrays(originalFilenames, maxWidth)
-
-    '''# Blender stores images as 1D arrays, ordered as described in https://blender.stackexchange.com/questions/13422/crop-image-with-python-script/13516#13516
-    # This function generates a 2D array of (r,g,b,a) tuples from said 1D list
-    # Calling the result at index [i][j] will return the pixel in the i-th row from the bottom, j-th column from the left
-    # i.e. where i=j=0 is the bottom-left pixel.
-    def blenderImageToTwoD(self, blenderImage):
-        x = blenderImage.size[0]
-        y = blenderImage.size[1]
-        image = numpy.empty(shape=(x,y), dtype=(float,4))
-        index = 0
-        for i in range(x):
-            for j in range(y):
-                r = blenderImage.pixels[index]
-                g = blenderImage.pixels[index+1]
-                b = blenderImage.pixels[index+2]
-                a = blenderImage.pixels[index+3]
-                # Apparently, in blender images, lower alpha -> "darker"
-                if a > 0:
-                    r = r/a
-                    g = g/a
-                    b = b/a
-                image[i][j] = (r,g,b,a)
-                index += 4
-        return image'''
 
     # maxWidth is not actually used at the moment, but I plan to do something with it if there's time later.
     def createArrays(self, originalFilenames, maxWidth=1024):
@@ -190,88 +204,64 @@ class imageProcessor:
             # Crop the image by slicing from the first index of nonzeroRows to the last, and the same for columns
             image = image[nonzeroRows[0]:nonzeroRows[-1]+1, nonzeroCols[0]:nonzeroCols[-1]+1]
 
+            newAlphas = image[:,:,3]
+
             # Access the image's alpha and create an array of bools that state whether the alpha is zero or not 
-            zeroAlphas = ((image[:,:,3]) != 0)
+            visibles = ((newAlphas) != 0)
             # Now, we get the number of transparent pixels we must traverse over, from the left, in each row until we hit the "object", i.e. a nontransparent pixel
             # This information will allow us to fit "neighbouring" images' height ranges to match this "outline"
-            self.spaces[face] = {
-                TOP_SIDE: (zeroAlphas[::-1,:]!=0).argmax(axis=0),
-                RIGHT_SIDE: (zeroAlphas[:,::-1]!=0).argmax(axis=1),
-                BOTTOM_SIDE: (zeroAlphas!=0).argmax(axis=0),
-                LEFT_SIDE: (zeroAlphas!=0).argmax(axis=1)
-            }
-
-            self.images2D[face] = image
-            '''self.alphas = {}
-            self.alphas[LEFT_SIDE] = np.empty(len(image))
-            self.alphas[RIGHT_SIDE] = np.empty(len(image))
-            self.alphas[TOP_SIDE] = np.empty(len(image[0]))'''
+            topSpaces = (visibles[::-1,:]!=0).argmax(axis=0)
+            rightSpaces = (visibles[:,::-1]!=0).argmax(axis=1)
+            bottomSpaces = (visibles!=0).argmax(axis=0)
+            leftSpaces = (visibles!=0).argmax(axis=1)
+            print("----------")
+            for s in [topSpaces, rightSpaces, bottomSpaces, leftSpaces]:
+                print("space shape:", s.shape)
 
             '''
-            # LEFT
-            cropLeft = 0
-            foundPosAlpha = False
-            while not foundPosAlpha:
-                for j in range(len(image)):
-                    if image[j][cropLeft][3] > 0.0:
-                        foundPosAlpha = True
-                        break
-                if foundPosAlpha:
-                    break
-                else:
-                    cropLeft += 1
-            # RIGHT
-            cropRight = len(image[0])-1
-            foundPosAlpha = False
-            while not foundPosAlpha:
-                for j in range(len(image)):
-                    if image[j][cropRight][3] > 0.0:
-                        foundPosAlpha = True
-                        break
-                if foundPosAlpha:
-                    break
-                else:
-                    cropRight -= 1
-            # TOP
-            cropTop = len(image)-1
-            foundPosAlpha = False
-            while not foundPosAlpha:
-                for j in range(len(image[0])):
-                    if image[cropTop][j][3] > 0.0:
-                        foundPosAlpha = True
-                        break
-                if foundPosAlpha:
-                    break
-                else:
-                    cropTop -= 1
-            # BOTTOM
-            cropBottom = 0
-            foundPosAlpha = False
-            while not foundPosAlpha:
-                for j in range(len(image[0])):
-                    if image[cropBottom][j][3] > 0.0:
-                        foundPosAlpha = True
-                        break
-                if foundPosAlpha:
-                    break
-                else:
-                    cropBottom += 1
-            image = image[cropBottom:cropTop+1,cropLeft:cropRight+1] 
+            # Now, we add a float component to the spaces based on the border pixel's transparency
+            rowIndices = numpy.indices((newAlphas.shape[0],))
+            colIndices = numpy.indices((newAlphas.shape[1],))
+            #Top
+            topSpaces = topSpaces + 1-newAlphas[newAlphas.shape[0] - 1 - topSpaces, colIndices]
+            #Right
+            rightSpaces = rightSpaces + 1-newAlphas[rowIndices, newAlphas.shape[1] - 1 - rightSpaces]
+            #Bottom
+            bottomSpaces = bottomSpaces + 1-newAlphas[bottomSpaces, colIndices]
+            #Left
+            leftSpaces = leftSpaces + 1-newAlphas[rowIndices, leftSpaces]
+            '''
+
+            self.spaces[face] = {
+                TOP_SIDE: topSpaces.flatten(),
+                RIGHT_SIDE: rightSpaces.flatten(),
+                BOTTOM_SIDE: bottomSpaces.flatten(),
+                LEFT_SIDE: leftSpaces.flatten()
+            }
+
+            print("----------")
+            for side in SIDES:
+                print("space shape NEW:", self.spaces[face][side].shape)
+
+
             self.images2D[face] = image
+            '''
             print(face, "---------------------")
             print("cropLeft:", cropLeft)
             print("cropRight:", cropRight)
             print("cropTop:", cropTop)
             print("cropBottom:", cropBottom)
             '''
-            '''for xp in range(len(image)-1, -1, -1):
+            '''
+            for xp in range(len(image)-1, -1, -1):
                 for yp in range(len(image[xp])):
                     pixel = image[xp][yp]
                     if pixel[3] <= 0:
                         print("___", end=", ")
                     else:
                         print(pixel[0], end=", ")
-                print("\n_ _ _ _ _ _ _")'''
+                print("\n_ _ _ _ _ _ _")
+            '''
         self.xLen = self.images2D[TOP_FACE].shape[0]
         self.yLen = self.images2D[FRONT_FACE].shape[1]
         self.zLen = self.images2D[FRONT_FACE].shape[0]
@@ -284,7 +274,7 @@ class imageProcessor:
         for i in FACES:
             self.setImageHeightRangeSingle(i)
         for face in FACES:
-            print("Face info for face", face, ":")
+            print("\nFace info for face", face, ":")
             d = self.depthDictionary[face]
             print("highestFloat:", d["highestFloat"], "\nhighestCellDepth:", d["highestCellDepth"], "\nlowestFloat:", d["lowestFloat"], "\nlowestCellDepth:", d["lowestCellDepth"])
             print()
@@ -300,8 +290,8 @@ class imageProcessor:
         # And from the math side, all that matters is the relative linear ranges between pixels
         heights = -selectedImage[:,:,0]
         alphas = selectedImage[:,:,3]
-        transparentIndices = (alphas == 0)
-        visibleIndices = alphas.nonzero()
+        transparentIndices = (alphas < 1)
+        visibleIndices = (alphas == 1)
         # Set all transparent pixels' heights to negative infinity, so they don't get considered for "max"
         heights[transparentIndices] = numpy.NINF # NINF = "Negative INFinity"
         
@@ -316,9 +306,12 @@ class imageProcessor:
         print("Min and Max height, respectively:", (minHeight, maxHeight))
         heightRange = maxHeight - minHeight
 
-        rangesPerSide = []
+        # We'll create a list of upper & lower bounds that would allow each row/column to "fit" with the outline in the neighbouring image
+        upperRangesPerSide = []
+        lowerRangesPerSide = []
 
         for side in SIDES:
+            # Row maxes are visible from left/right neighbour images. Column maxes are visible from top/bottom neighbours.
             maxes = maxPerRow
             if side == TOP_SIDE or side == BOTTOM_SIDE:
                 maxes = maxPerCol
@@ -332,6 +325,8 @@ class imageProcessor:
             # To line up the images, this "depth" should equal the number of transparent pixels, e.g. "spaces", it takes to "reach" the object in a corresponding row or col of a corresponding neighbour image
             # This way, we'll get the outline of the object correct.
             # If we re-arrange this equality, we get cellRange = spaces*(maxHeight-minHeight)/(maxHeight - h)
+            # Of course, there's also rounding at play, which means we'll actually look for a span of values that would satisfy cellRange
+            # This will be commented on a bit more below.
 
             # These are the (maxHeight - h) values
             diffsFromMax = maxHeight - maxes
@@ -340,17 +335,41 @@ class imageProcessor:
             validIndices = diffsFromMax.nonzero()
             spacesValid = spaces[validIndices]
             diffsValid = diffsFromMax[validIndices]
-            rangesForThisSide = heightRange * spacesValid / diffsValid
-            rangesForThisSide = rangesForThisSide[rangesForThisSide.nonzero()]
-            rangesPerSide.append(rangesForThisSide)
-        cellRanges = numpy.concatenate(tuple(rangesPerSide))
-        # Remove outliers, which may to happen if a depth range is a quite uniform, flat surface.
-        cellRanges = removeOutliers(cellRanges)
+
+            # Spaces of zero (or that'd round to zero) also don't matter, since they'll be trivially mapped to 0 cells deep regardless
+            relevant = spacesValid.nonzero() #spacesValid.floor().nonzero()
+            spacesRelevant = spacesValid[relevant]
+            diffsRelevant = diffsValid[relevant]
+
+            # Since the "spaces"/pixels are at discrete intervals, we don't need to match them exactly.
+            # We should just match some number that would round to them. 
+            # We'll use a tolerance of 0.49 on each side; almost half, but a bit less to accomodate floating point precision issues and other stuff.
+            tolerance = 1.49
+
+            upperRangesForThisSide = heightRange * (spacesRelevant + tolerance) / diffsRelevant
+            lowerRangesForThisSide = heightRange * (spacesRelevant - tolerance) / diffsRelevant
+            # For the lower, we also want to make sure we don't say that the range could be negative.
+            # Replace all negative values with zero.
+            lowerRangesForThisSide = lowerRangesForThisSide.clip(min=0)
+
+            upperRangesPerSide.append(upperRangesForThisSide)
+            lowerRangesPerSide.append(lowerRangesForThisSide)
+            
+
+        upperCellRanges = numpy.concatenate(tuple(upperRangesPerSide))
+        lowerCellRanges = numpy.concatenate(tuple(lowerRangesPerSide))
+        
+        bestBoundary = marzullo(upperCellRanges, lowerCellRanges)
+        print("Satisfied boundaries:", bestBoundary[2], "/", len(upperCellRanges), ".")
+        guessRange = (bestBoundary[0] + bestBoundary[1])/2
+
+        '''
         print("Ranges for face", selectedFace, ":")
         print(cellRanges)
         print("Min and max suggested ranges:", (numpy.amin(cellRanges), numpy.amax(cellRanges)))
         print("Nonzero entries:", numpy.count_nonzero(cellRanges), "/", cellRanges.shape[0])
         guessRange = round(numpy.median(cellRanges))
+        '''
 
         self.depthDictionary[selectedFace] = {
             "highestFloat": maxHeight,
@@ -360,239 +379,13 @@ class imageProcessor:
         }
         return
 
-
-
     
-    # OLD, OUTDATED FUNCTION THAT WORKED FOR SOME OBJECTS, BUT HAD FLAWS ON OTHERS
-    def OLD_setImageHeightRangeSingle(self, selectedFace):
-        selectedImage = self.images2D[selectedFace]
-        # First, find 1 minus the "highest" pixel's value
-        # (The 1 minus is because darker pixels are higher, but it's more intuitive to encode higher values as, well, higher floats)
-        highest = -math.inf
-        for i in range(len(selectedImage)):
-            for j in range(len(selectedImage[i])):
-                # Check the pixel's alpha, to ensure pixel is not transparent.
-                if selectedImage[i][j][3] > 0:
-                    # Choose any of the RGB channels for height comparison
-                    if -selectedImage[i][j][0] > highest:
-                        highest = -selectedImage[i][j][0]
-        # Then, from ANY "side" reference image, find out where this max value occurs.
-        # We'll choose the image from the top side.
-        correspondingFace = BORDER_DICTIONARY[selectedFace][TOP_SIDE]["face"]
-        correspondingFaceImage = self.images2D[correspondingFace]
-        correspondingSide = BORDER_DICTIONARY[selectedFace][TOP_SIDE]["side"]
-        depthInwardsHighest = 0
-        foundOpaque = False
-        # First, we handle the case for when correspondingSide is LEFT or RIGHT 
-        if correspondingSide == LEFT_SIDE or correspondingSide == RIGHT_SIDE:
-            columnToSearch = 0
-            colIncrement = 1
-            if correspondingSide == RIGHT_SIDE:
-                columnToSearch = len(correspondingFaceImage[0])-1
-                colIncrement = -1
-            # Search column-by-column until we find something opaque.
-            while not foundOpaque:
-                for row in range(len(correspondingFaceImage)):
-                    if correspondingFaceImage[row][columnToSearch][3] > 0.0:
-                        foundOpaque = True
-                        break
-                if not foundOpaque:
-                    columnToSearch += colIncrement
-                    depthInwardsHighest += 1
-        # THEN, we handle the case for when correspondingSide is TOP or BOTTOM
-        else:
-            rowToSearch = 0
-            rowIncrement = 1
-            if correspondingSide == TOP_SIDE:
-                rowToSearch = len(correspondingFaceImage)-1
-                rowIncrement = -1
-            # Search row-by-row until we find something opaque.
-            while not foundOpaque:
-                for col in range(len(correspondingFaceImage[rowToSearch])):
-                    if correspondingFaceImage[rowToSearch][col][3] > 0.0:
-                        foundOpaque = True
-                        break
-                if not foundOpaque:
-                    rowToSearch += rowIncrement
-                    depthInwardsHighest += 1
-
-        # Then, find the "lowest" pixel's value ON THE OUTERMOST EDGE(S) OF THE OBJECT!
-        #   (i.e. not "lowest" pixel overall, as that may correspond to indents that are invisible from other angles)
-        #   ALSO, keep track of which of the four "sides" this point's "edge" will be visible from
-        # Set default/starting values for the info to keep track of
-        lowestEdge = math.inf
-        lowestSide = TOP_SIDE # Random default; could have just as well been LEFT, RIGHT, or BOTTOM_SIDE.
-        lowestEdgeLoc = (-1,-1) # for debugging
-        lowestEdgePixel = (-1,-1,-1,-1) # for debugging
-        # First, the left and right sides are tested.
-        # (We also do checks on indices in case we somehow, in spite of prior cropping, end up with an all-transparent row)
-        for row in range(len(selectedImage)):
-            #Test from the left
-            leftColumn = 0
-            while leftColumn < len(selectedImage[row]) and selectedImage[row][leftColumn][3] <= 0:
-                leftColumn += 1
-            rightColumn = len(selectedImage[row]) - 1
-            while rightColumn >= 0 and selectedImage[row][rightColumn][3] <= 0:
-                rightColumn -= 1
-            if leftColumn < len(selectedImage[row]) and -selectedImage[row][leftColumn][0] < lowestEdge:
-                lowestEdge = -selectedImage[row][leftColumn][0]
-                lowestSide = LEFT_SIDE
-                lowestEdgeLoc = (leftColumn,len(selectedImage)-1-row)
-                lowestEdgePixel = selectedImage[row][leftColumn]
-            if rightColumn >= 0 and -selectedImage[row][rightColumn][0] < lowestEdge:
-                lowestEdge = -selectedImage[row][rightColumn][0]
-                lowestSide = RIGHT_SIDE
-                lowestEdgeLoc = (rightColumn,len(selectedImage)-1-row)
-                lowestEdgePixel = selectedImage[row][rightColumn]
-        # Then, the top and bottom sides are tested.
-        # (We also do checks on indices in case we somehow, in spite of prior cropping, end up with an all-transparent column)
-        for column in range(len(selectedImage[0])):
-            #Test from the top
-            topRow = len(selectedImage) - 1
-            while topRow >= 0 and selectedImage[topRow][column][3] <= 0:
-                topRow -= 1
-            bottomRow = 0
-            while bottomRow < len(selectedImage) and selectedImage[bottomRow][column][3] <= 0:
-                bottomRow += 1
-            if topRow >= 0 and -selectedImage[topRow][column][0] < lowestEdge:
-                lowestEdge = -selectedImage[topRow][column][0]
-                lowestSide = TOP_SIDE
-                lowestEdgeLoc = (column,len(selectedImage)-1-topRow)
-                lowestEdgePixel = selectedImage[topRow][column]
-            if bottomRow < len(selectedImage) and -selectedImage[bottomRow][column][0] < lowestEdge:
-                lowestEdge = -selectedImage[bottomRow][column][0]
-                lowestSide = BOTTOM_SIDE
-                lowestEdgeLoc = (column,len(selectedImage)-1-bottomRow)
-                lowestEdgePixel = selectedImage[bottomRow][column]
-        print("\nCURRENT FACE:", selectedFace)
-        print("location:", lowestEdgeLoc)
-        print("whole pixel:", lowestEdgePixel)
-        print("lowestSide:", lowestSide)
-        # Then, from THE "side" reference image corresponding to the "lowestEdge" pixel's value
-        #   This is, as may be expected, the most complicated part.
-        #   We will have to approach it as follows:
-        #       Let A represent the image we're analyzing with this call to setImageHeightRangeSingle()
-        #       Let B represent the "side" reference image we're using to try and find the lower value in A.
-        #       For this example, assume A and B are "joined" on the right edge of B.
-        #       Then, for each row of B, we find the darkest ("highest") pixel, and keep track of which column it belongs to.
-        #           If there's ever a "tie", we keep the rightmost tied pixel, since that's the one that'd be visible from A in this example.
-        #       After doing this for each row, we choose the pixel furthest away from the right edge as our "match", in this example.
-        #           Again, if there are ties HERE, it doesn't matter, since we only care about distance from the joining edge
-        #       Now, the distance from this pixel to the right edge will be the depthInwardsLowest value we choose.
-        correspondingFace = BORDER_DICTIONARY[selectedFace][lowestSide]["face"]
-        correspondingFaceImage = self.images2D[correspondingFace]
-        correspondingSide = BORDER_DICTIONARY[selectedFace][lowestSide]["side"]
-        depthInwardsLowest = 0
-        lowestRefLoc = (-1,-1) # for debugging
-        lowestRefPixel = (-1,-1,-1,-1) # for debugging
-        # First, we handle the case for when correspondingSide is LEFT or RIGHT 
-        if correspondingSide == LEFT_SIDE or correspondingSide == RIGHT_SIDE:
-            print("LEFT/RIGHT for face", selectedFace)
-            startIndex = 0
-            colIncrement = 1
-            if correspondingSide == RIGHT_SIDE:
-                startIndex = len(correspondingFaceImage[0])-1
-                colIncrement = -1
-            print("INCREMENT:", colIncrement)
-            columnToSearch = startIndex
-            # This array will keep track of the max height found in each row, and where it is.
-            rowMaxes = []
-            for i in range(len(correspondingFaceImage)):
-                rowMaxes.append({ "val": -10000.0, "depth":startIndex, "debugPixel":(-1,-1,-1,-1) })
-            # Search column-by-column until we find something opaque.
-            while columnToSearch in range(len(correspondingFaceImage[0])):
-                for row in range(len(correspondingFaceImage)):
-                    # Alpha check & comparing with current max
-                    if correspondingFaceImage[row][columnToSearch][3] > 0.0 and correspondingFaceImage[row][columnToSearch][0] > rowMaxes[row]["val"]:
-                        rowMaxes[row]["val"] = correspondingFaceImage[row][columnToSearch][0]
-                        rowMaxes[row]["debugPixel"] = correspondingFaceImage[row][columnToSearch]
-                        rowMaxes[row]["depth"] = columnToSearch
-                columnToSearch += colIncrement
-            # Now, we set depthInwardsLowest to be the greatest distance from the edge observed in rowMaxes.
-            for rNum in range(len(rowMaxes)):
-                r = rowMaxes[rNum]
-                curDist = abs(r["depth"] - startIndex)
-                if curDist > depthInwardsLowest:
-                    depthInwardsLowest = curDist
-                    lowestRefLoc = (r["depth"], rNum)
-                    lowestRefPixel = r["debugPixel"]
-
-        # THEN, we handle the case for when correspondingSide is TOP or BOTTOM
-        else:
-            print("TOP/BOTTOM for face", selectedFace)
-            startIndex = 0
-            rowIncrement = 1
-            if correspondingSide == TOP_SIDE:
-                startIndex = len(correspondingFaceImage)-1
-                rowIncrement = -1
-            print("INCREMENT:", rowIncrement, "; START_INDEX:", startIndex)
-            rowToSearch = startIndex
-            # This array will keep track of the max height found in each column, and where it is.
-            colMaxes = []
-            for i in range(len(correspondingFaceImage[0])):
-                colMaxes.append({ "val": -10000.0, "depth":startIndex, "debugPixel":(-1,-1,-1,-1) })
-            # Search row-by-row until we find something opaque.
-            while rowToSearch in range(len(correspondingFaceImage)):
-                for col in range(len(correspondingFaceImage[0])):
-                    # Alpha check & comparing with current max
-                    if correspondingFaceImage[rowToSearch][col][3] > 0.0 and -correspondingFaceImage[rowToSearch][col][0] > colMaxes[col]["val"]:
-                        colMaxes[col]["val"] = -correspondingFaceImage[rowToSearch][col][0]
-                        colMaxes[col]["debugPixel"] = correspondingFaceImage[rowToSearch][col]
-                        colMaxes[col]["depth"] = rowToSearch
-                        #print("Updating at row:", rowToSearch)
-                rowToSearch += rowIncrement
-            # Now, we set depthInwardsLowest to be the greatest distance from the edge observed in colMaxes.
-            for cNum in range(len(colMaxes)):
-                c = colMaxes[cNum]
-                curDist = abs(c["depth"] - startIndex)
-                if curDist > depthInwardsLowest:
-                    depthInwardsLowest = curDist
-                    lowestRefLoc = (cNum, c["depth"])
-                    lowestRefPixel = c["debugPixel"]
-        print("ref location:", lowestRefLoc, "out of", (len(correspondingFaceImage[0]), len(correspondingFaceImage)))
-        print("whole ref pixel:", lowestRefPixel)
-        print("Reference: face =", correspondingFace, ", side =", correspondingSide)
-        print()
-
-        self.depthDictionary[selectedFace] = {
-            "highestFloat": highest,
-            "highestCellDepth": depthInwardsHighest,
-            "lowestFloat": lowestEdge,
-            "lowestCellDepth": depthInwardsLowest
-        }
-        return
 
     def generate3D(self):
         # For ease of typing
         zLen = self.zLen
         yLen = self.yLen
         xLen = self.xLen
-        '''
-
-        # A quick "in bounds" function that states whether a coordinate is within the dimensions of our 3D array.
-        inBounds = lambda coord: coord[0] >= 0 and coord[0] < xLen and coord[1] >= 0 and coord[1] < yLen and coord[2] >= 0 and coord[2] < zLen
-        # Lambda for elementwise adding two tuples of length 3
-        add = lambda x, y: (x[0] + y[0], x[1] + y[1], x[2] + y[2])
-        constMult = lambda k, vec: (k*vec[0], k*vec[1], k*vec[2])
-
-        # Dictionary of "starting positions" for iteration for each face.
-        # For each pixel in each face's image, we'll traverse "inwards" through the 3D array.
-        # So, for the coordinates corresponding to pixel selection, we'll start at 0 and 0 (e.g. for FACE_FRONT, y = 0 and z = 0)
-        # For the coordinate corresponding to the "depth" coordinate for the face, we'll start at either 0 or the "max" for that direction.
-        # E.g. for FRONT_FACE, we start at x = (xLen - 1) and end at x=0.
-        startDict = {
-            FRONT_FACE: (xLen-1, 0, 0),
-            LEFT_FACE: (0,0,0),
-            BACK_FACE: (0,yLen-1,0),
-            RIGHT_FACE: (xLen-1,yLen-1,0),
-            TOP_FACE: (xLen-1,0,zLen-1),
-            BOTTOM_FACE: (xLen-1,yLen-1,0)
-        }
-        # We'll do two phases.
-        # First, we'll do all "definitive" cells, with alpha values zero or one.
-        # Then, we'll do all partial-alpha cells IF there's no conflict.
-        # March, for each pixel on each "face" of the surrounding cube, inwards and replace 1's with 0's (edge) and -1's (outside) values wherever alpha is strictly 0 or 1.
-        '''
 
         structureInfo = {
             FRONT_FACE: {
@@ -683,78 +476,7 @@ class imageProcessor:
             
             pointsList = stackedList[visibles]
             
-            '''
-
-            pixelXIndex = 0
-            pixelYIndex = 0
-
-            if depthRange <= 0:
-                # The actual logic happens deeper inside the while loop. Look for it below, marked with "#updateme"
-                print("REMINDER: ALLOW USER-INPUT MODIFICATION FOR CASE WHERE DEPTH RANGE MAPPING CANNOT BE AUTOMATICALLY DETERMINED!")
-                print("SETTING ALL VALUES TO 'MAX' AS TEMPORARY DEFAULT!")
-            index = startDict[face] # Convert into list so that it's mutable
-
-            while inBounds(index):
-                refIndexHoriz = index # Save current index before the "vert" and "inwards" coords are altered
-                while inBounds(index):
-                    refIndexVert = index # Save current index before the "inwards" coord is altered
-                    depth = 0
-                    
-                    pixelVal = self.images2D[face][pixelYIndex][pixelXIndex]
-                    # The negation is to represent the higher, darker pixels with higher/larger floats, to be consistent with other parts of this code
-                    pixelHeight = -pixelVal[0]
-                    pixelAlpha = pixelVal[3]
-                    if depthRange == 0:
-                        #updateme
-                        depthCap = highestCellDepth
-                    else:
-                        depthCap = round(((highestFloat-pixelHeight)*lowestCellDepth + (pixelHeight - lowestFloat)*highestCellDepth)/depthRange)
-                    if pixelAlpha > 0:
-                        #print("index:", index)
-                        #print("depthCap:", depthCap)
-                        depthToTraverse = constMult(depthCap, iteration3D_Dictionary[face]["inwards"])
-                        #print("depthToTraverse:", depthToTraverse)
-                        cubeIndex = add(index, depthToTraverse)
-                        #print("CubeIndex:", cubeIndex)
-                        points3D.append(cubeIndex)
-                        #print("\n][][][][][\n")
-            '''
-            '''
-                    # Alpha check
-                    if pixelAlpha == 1 and phase == 0:
-                        while inBounds(index) and depth < depthCap:
-                            if self.object3D[index] == 1:
-                                self.object3D[index] = -1 # OUTSIDE = -1
-                            index = add(index, iteration3D_Dictionary[face]["inwards"])
-                            depth += 1
-                        if inBounds(index):
-                            self.object3D[index] = 0 # BOUNDARY = 0
-                    elif pixelAlpha == 0 and phase == 0:
-                        while inBounds(index):
-                            if self.object3D[index] == 1:
-                                self.object3D[index] = -1 # OUTSIDE = -1
-                            index = add(index, iteration3D_Dictionary[face]["inwards"])
-                    elif pixelAlpha != 0 and pixelAlpha != 1 and phase == 1:
-                        while inBounds(index) and depth < depthCap:
-                            # Make sure we don't overwrite a "definitive" value from first phase
-                            if self.object3D[index] == 1:
-                                self.object3D[index] = -1 # OUTSIDE = -1
-                            index = add(index, iteration3D_Dictionary[face]["inwards"])
-                            depth += 1
-                        # Make sure we don't overwrite a "definitive" value from first phase
-                        if inBounds(index) and self.object3D[index] == 1:
-                            self.object3D[index] = 0 # BOUNDARY = 0
-            '''
-            '''
-                    # reset "inwards" and increment "vert"
-                    index = add(refIndexVert, iteration3D_Dictionary[face]["vertical"])
-                    pixelYIndex += 1
-                # reset "vert" and "inwards" and increment "horiz"
-                index = add(refIndexHoriz, iteration3D_Dictionary[face]["horizontal"])
-                pixelXIndex += 1
-                pixelYIndex = 0
-                #print("Done a slice.")
-            '''
+            
             self.points3D[face] = pointsList
             print("Done one face.")
         #self.points3D = numpy.array(points3D)
