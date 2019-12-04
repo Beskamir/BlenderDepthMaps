@@ -4,13 +4,67 @@ import numpy
 from random import randint 
 import time
 
+# Based on voxelize.py code
+def genTriangles(triangles, name="marching cubes"):
+    # For now, we'll combine the voxels from each of the six views into one array and then just take the unique values.
+    # Later on, this could be re-structured to, for example, render the voxels from each face in a separate colour
+
+    print("Number of triangles:", len(triangles))
+    mesh = bpy.data.meshes.new("mesh")  # add a new mesh
+    obj = bpy.data.objects.new(name, mesh)
+    bpy.context.collection.objects.link(obj)  # put the object into the scene (link)
+    bpy.context.view_layer.objects.active = obj
+    obj.select_set(state=True)  # select object
+    mesh = obj.data
+    bm = bmesh.new()
+
+    print("Creating vertices...")
+    
+    printAfterCount = 100000
+    nextThreshold = 0
+    pointsDone = 0
+
+    # Setup the vertices for the object  
+    for triangle in triangles:
+        for v in triangle:
+            bm.verts.new(v)
+            pointsDone += 1
+            if pointsDone > nextThreshold:
+                print(pointsDone, "vertices have been added so far.")
+                nextThreshold += printAfterCount
+    print("Calling to_mesh().")
+    bm.to_mesh(mesh)
+    print("Ensuring lookup table.")
+    bm.verts.ensure_lookup_table()
+
+    # Create the faces for the object
+    for i in range(0,len(bm.verts),3):
+        bm.faces.new( [bm.verts[i+0], bm.verts[i+1],bm.verts[i+2]])
+
+    if bpy.context.mode == 'EDIT_MESH':
+        bmesh.update_edit_mesh(obj.data)
+    else:
+        bm.to_mesh(obj.data)
+    obj.data.update()
+    bm.free
+
+    # Merge overlapping vertices once everything's generated
+    bpy.ops.object.editmode_toggle()
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.mesh.remove_doubles(threshold=0.0001)
+    bpy.ops.object.editmode_toggle()
+    return obj
+
 
 # Given a 3D array of -1's, 0's and 1's it'll place a marching cube based on the vertices that would be 0
 def imagesToMarchingInefficient(image3D):
-    print("image",image3D)
+    # print("image",image3D)
+    print("starting marching cube alg")
+    triangles = []
     for xValue in range(0,len(image3D)-1,2):
         for yValue in range(0,len(image3D[xValue])-1,2):
             for zValue in range(0,len(image3D[xValue][yValue])-1,2):
+                # get the neighboring vertices/pixels
                 cubeVerts = [
                     image3D[xValue][yValue][zValue],
                     image3D[xValue][yValue][zValue+1],
@@ -21,14 +75,19 @@ def imagesToMarchingInefficient(image3D):
                     image3D[xValue+1][yValue][zValue+1],
                     image3D[xValue+1][yValue+1][zValue+1],
                     image3D[xValue+1][yValue+1][zValue]]
-                print("cubeVerts:",cubeVerts)
-                placeMarchingCube(cubeVerts)
-
+                # print("cubeVerts:",cubeVerts)
+                # Offset is for moving the marching cube result to the correct cell
+                offset = numpy.array([xValue, yValue, zValue])
+                triangles = placeMarchingCube(cubeVerts, triangles, offset)
+    print("ended marching cube alg")
+    # print("triangles",triangles)
+    genTriangles(triangles)
                 # if(image3D[xValue][yValue][zValue]==0):
                     # createVoxel((xValue,yValue,zValue))
 
 # Marching cubes algorithm taken from https://github.com/mutantbob/blender-marching-cubes/blob/master/yeus-marching-cube.py
-def placeMarchingCube(cubeVerts):
+def placeMarchingCube(cubeVerts, triangles, offset):
+    # The giant look up tables to figure out which vertices correspond to which marching cube faces
     edgeTable=( 0x0  , 0x109, 0x203, 0x30a, 0x406, 0x50f, 0x605, 0x70c,
                 0x80c, 0x905, 0xa0f, 0xb06, 0xc0a, 0xd03, 0xe09, 0xf00,
                 0x190, 0x99 , 0x393, 0x29a, 0x596, 0x49f, 0x795, 0x69c,
@@ -322,53 +381,74 @@ def placeMarchingCube(cubeVerts):
     #  Figure out the index for the vertex table and which vertices should be created
     cubeIndex = 0
     for i in range(8):
-        if(cubeVerts[i]==0):
+        if(cubeVerts[i]<0):
             cubeIndex |= 1 << i
-    print("cube index", cubeIndex, bin(cubeIndex))
+    # print("cube index", cubeIndex, bin(cubeIndex))
 
     # Cube is entirely in/out of the surface
-    if edgeTable[cubeIndex] == 0: return []
+    # if edgeTable[cubeIndex] == 0: return []
     
+    # Organization of vertList set to match what was done elsewhere (aka the following stuff)
+    # image3D[xValue][yValue][zValue],
+    # image3D[xValue][yValue][zValue+1],
+    # image3D[xValue][yValue+1][zValue+1],
+    # image3D[xValue][yValue+1][zValue],
+    #
+    # image3D[xValue+1][yValue][zValue],
+    # image3D[xValue+1][yValue][zValue+1],
+    # image3D[xValue+1][yValue+1][zValue+1],
+    # image3D[xValue+1][yValue+1][zValue]]
+    cornerPos = numpy.array([
+        [0,0,0],[0,0,1],[0,1,1],[0,1,0],
+        [1,0,0],[1,0,1],[1,1,1],[1,1,0]])
+
+    def getVertexInfo(p1,p2):
+        return p2-p1
+
+    # todo: optimize this somehow?
     vertList=[[]]*12
 	# # Find the vertices where the surface intersects the cube
-    # if (edgeTable[cubeindex] & 1):    
-    #     vertlist[0]  = 0 + 1
-    # if (edgeTable[cubeindex] & 2):    
-    #     vertlist[1]  = vertexinterp(isolevel,cornerpos[1],cornerpos[2],cubeVerts[1],cubeVerts[2])
-    # if (edgeTable[cubeindex] & 4):   
-    #     vertlist[2]  = vertexinterp(isolevel,cornerpos[2],cornerpos[3],cubeVerts[2],cubeVerts[3])
-    # if (edgeTable[cubeindex] & 8):    
-    #     vertlist[3]  = vertexinterp(isolevel,cornerpos[3],cornerpos[0],cubeVerts[3],cubeVerts[0])
-    # if (edgeTable[cubeindex] & 16):   
-    #     vertlist[4]  = vertexinterp(isolevel,cornerpos[4],cornerpos[5],cubeVerts[4],cubeVerts[5])
-    # if (edgeTable[cubeindex] & 32):   
-    #     vertlist[5]  = vertexinterp(isolevel,cornerpos[5],cornerpos[6],cubeVerts[5],cubeVerts[6])
-    # if (edgeTable[cubeindex] & 64):   
-    #     vertlist[6]  = vertexinterp(isolevel,cornerpos[6],cornerpos[7],cubeVerts[6],cubeVerts[7])
-    # if (edgeTable[cubeindex] & 128):  
-    #     vertlist[7]  = vertexinterp(isolevel,cornerpos[7],cornerpos[4],cubeVerts[7],cubeVerts[4])
-    # if (edgeTable[cubeindex] & 256):  
-    #     vertlist[8]  = vertexinterp(isolevel,cornerpos[0],cornerpos[4],cubeVerts[0],cubeVerts[4])
-    # if (edgeTable[cubeindex] & 512):  
-    #     vertlist[9]  = vertexinterp(isolevel,cornerpos[1],cornerpos[5],cubeVerts[1],cubeVerts[5])
-    # if (edgeTable[cubeindex] & 1024): 
-    #     vertlist[10] = vertexinterp(isolevel,cornerpos[2],cornerpos[6],cubeVerts[2],cubeVerts[6])
-    # if (edgeTable[cubeindex] & 2048): 
-    #     vertlist[11] = vertexinterp(isolevel,cornerpos[3],cornerpos[7],cubeVerts[3],cubeVerts[7])
+    if (edgeTable[cubeIndex] & 1):    
+        vertList[0]  = [0,0,1]
+    if (edgeTable[cubeIndex] & 2):    
+        vertList[1]  = [0,1,2] 
+    if (edgeTable[cubeIndex] & 4):   
+        vertList[2]  = [0,2,1] 
+    if (edgeTable[cubeIndex] & 8):    
+        vertList[3]  = [0,1,0] 
+    if (edgeTable[cubeIndex] & 16):   
+        vertList[4]  = [2,0,1] 
+    if (edgeTable[cubeIndex] & 32):   
+        vertList[5]  = [2,1,2] 
+    if (edgeTable[cubeIndex] & 64):   
+        vertList[6]  = [2,2,1] 
+    if (edgeTable[cubeIndex] & 128):  
+        vertList[7]  = [2,1,0]
+    if (edgeTable[cubeIndex] & 256):  
+        vertList[8]  = [1,0,0] 
+    if (edgeTable[cubeIndex] & 512):  
+        vertList[9]  = [1,0,2] 
+    if (edgeTable[cubeIndex] & 1024): 
+        vertList[10] = [1,2,2] 
+    if (edgeTable[cubeIndex] & 2048): 
+        vertList[11] = [1,2,0] 
 
+    # print("offset",offset)
+    # print("triTable", triTable[cubeIndex])
     #Create the triangle
-    triangles = []
-    #for (i=0;triTable[cubeindex][i]!=-1;i+=3) {
+    # triangles = []
+    #for (i=0;triTable[cubeIndex][i]!=-1;i+=3) {
     i=0
+    # Create the triangles using the vert list from before 
     while triTable[cubeIndex][i] != -1:
         triangles.append([
-            vertList[triTable[cubeIndex][i  ]], 
-            vertList[triTable[cubeIndex][i+1]],
-            vertList[triTable[cubeIndex][i+2]]
+            vertList[triTable[cubeIndex][i  ]]+offset, 
+            vertList[triTable[cubeIndex][i+1]]+offset,
+            vertList[triTable[cubeIndex][i+2]]+offset
             ])
         i+=3
-    print("triangles", triangles)
-        
+    # print("triangles", triangles)
+    
     return triangles
 
 
@@ -376,29 +456,63 @@ def placeMarchingCube(cubeVerts):
 def createVoxel(position):
     bpy.ops.mesh.primitive_cube_add(location=position,size=1)
     # print(position)
-    
+
+# Given a 3D array of 0 and 1's it'll place a voxel in every cell that has a 1 in it
+def imagesToVoxelsInefficient(image3D):
+    for xValue in range(len(image3D)):
+        for yValue in range(len(image3D[xValue])):
+            for zValue in range(len(image3D[xValue][yValue])):
+                if(image3D[xValue][yValue][zValue]<0):
+                    createVoxel((xValue,yValue,zValue))
+
+
 if __name__ == "__main__":
     
     # calculate the runtime of this script
     startTime = time.time()
-
     # createVoxel((1,2,3))
     # Generate a 10*10*10 3D texture
     testImageArray = []
-    for x in range(2):
-        yArray = []
-        for y in range(2):
-            zArray = []
-            for z in range(2):
-                # zArray.append(0)
-                zArray.append(randint(-1,1))
-            yArray.append(zArray)
-            # yArray.append(randint(-1,1))
-        testImageArray.append(yArray)
+    testImageArray = [[[-1, 0], [-1, -1]], [[-1, -1], [-1, -1]]]
+    print("generating data")
+    # testImageArray = [
+    #     [[-1, -1, -1, -1], [-1, 0, 0, -1], [-1, 0, 0, -1], [-1, 0, 0, -1]],
+    #     [[-1, 0, 0, -1], [-1, 0, 0, -1], [-1, 0, 0, -1], [-1, 0, 0, -1]], 
+    #     [[-1, 0, 0, -1], [-1, 0, 0, -1], [-1, 0, 0, -1], [-1, 0, 0, -1]], 
+    #     [[-1, 0, 0, -1], [-1, 0, 0, -1], [-1, 0, 0, -1], [-1, -1, -1, -1]]]
 
+    # Test functions to make sure marching cubes work
+    import math
+    def implicitSphere(x, y, z):
+        return x*x + y*y + z*z - 1.0
+
+    def implicitHeart(x, y, z):
+        return (math.pow((2 * x*x + y*y + z*z - 1.0), 3) -
+                (0.1*x*x + y*y)*z*z*z)
+    xMax = 2 
+    yMax = 2
+    zMax = 2
+    # for x in range(xMax):
+    # # for x in range(-xMax,xMax):
+    #     yArray = []
+    #     for y in range(yMax):
+    #     # for y in range(-yMax,yMax):
+    #         zArray = []
+    #         for z in range(zMax):
+    #         # for z in range(-zMax,zMax):
+    #             # zArray.append(0)
+    #             # zArray.append(implicitHeart((2*x)/(xMax), (2*y)/(yMax), (2*z)/(zMax)))
+    #             # zArray.append(implicitSphere((2*x)/(xMax), (2*y)/(yMax), (2*z)/(zMax)))
+    #             zArray.append(randint(-1,1))
+    #         yArray.append(zArray)
+    #         # yArray.append(randint(-1,1))
+    #     testImageArray.append(yArray)
+    print("generated data")
+    print(testImageArray)
     # print(testImageArray)
     # place voxels based on that 10*10*10 array
     imagesToMarchingInefficient(testImageArray)
+    imagesToVoxelsInefficient(testImageArray)
     # testImage = [[[0,0],[1,1]],[[1,1],[1,0]]]
     
     stopTime = time.time()
