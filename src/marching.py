@@ -4,6 +4,11 @@ import numpy
 from random import randint 
 import time
 
+# This essentially "numbers" the vertices of the marching cube 
+cornerPos = numpy.array([
+    [0,0,0],[0,0,1],[0,1,1],[0,1,0],
+    [1,0,0],[1,0,1],[1,1,1],[1,1,0]])
+
 # Based on voxelize.py code
 def genTriangles(triangles, name="marching cubes"):
     # For now, we'll combine the voxels from each of the six views into one array and then just take the unique values.
@@ -65,16 +70,9 @@ def imagesToMarchingInefficient(image3D):
         for yValue in range(0,len(image3D[xValue])-1,2):
             for zValue in range(0,len(image3D[xValue][yValue])-1,2):
                 # get the neighboring vertices/pixels
-                cubeVerts = [
-                    image3D[xValue][yValue][zValue],
-                    image3D[xValue][yValue][zValue+1],
-                    image3D[xValue][yValue+1][zValue+1],
-                    image3D[xValue][yValue+1][zValue],
-
-                    image3D[xValue+1][yValue][zValue],
-                    image3D[xValue+1][yValue][zValue+1],
-                    image3D[xValue+1][yValue+1][zValue+1],
-                    image3D[xValue+1][yValue+1][zValue]]
+                cubeVerts=[]
+                for i in range(8):
+                    cubeVerts.append(image3D[cornerPos[i][0]][cornerPos[i][1]][cornerPos[i][2]])
                 # print("cubeVerts:",cubeVerts)
                 # Offset is for moving the marching cube result to the correct cell
                 offset = numpy.array([xValue, yValue, zValue])
@@ -386,52 +384,53 @@ def placeMarchingCube(cubeVerts, triangles, offset):
     # print("cube index", cubeIndex, bin(cubeIndex))
 
     # Cube is entirely in/out of the surface
-    # if edgeTable[cubeIndex] == 0: return []
+    if edgeTable[cubeIndex] == 0: return []
     
-    # Organization of vertList set to match what was done elsewhere (aka the following stuff)
-    # image3D[xValue][yValue][zValue],
-    # image3D[xValue][yValue][zValue+1],
-    # image3D[xValue][yValue+1][zValue+1],
-    # image3D[xValue][yValue+1][zValue],
-    #
-    # image3D[xValue+1][yValue][zValue],
-    # image3D[xValue+1][yValue][zValue+1],
-    # image3D[xValue+1][yValue+1][zValue+1],
-    # image3D[xValue+1][yValue+1][zValue]]
-    cornerPos = numpy.array([
-        [0,0,0],[0,0,1],[0,1,1],[0,1,0],
-        [1,0,0],[1,0,1],[1,1,1],[1,1,0]])
-
+    # TODO: Bug is probably somewhere here?
     def getVertexInfo(p1,p2):
-        return p2-p1
+        print(p2,p1)
+        print(p2+p1)
+        return (p2+p1)
 
-    # todo: optimize this somehow?
+    # TODO: maybe optimize this a bit?
     vertList=[[]]*12
 	# # Find the vertices where the surface intersects the cube
     if (edgeTable[cubeIndex] & 1):    
-        vertList[0]  = [0,0,1]
+        vertList[0]  = getVertexInfo(cornerPos[0],cornerPos[1])
+        print("T0")
     if (edgeTable[cubeIndex] & 2):    
-        vertList[1]  = [0,1,2] 
+        vertList[1]  = getVertexInfo(cornerPos[1],cornerPos[2]) 
+        print("T1")
     if (edgeTable[cubeIndex] & 4):   
-        vertList[2]  = [0,2,1] 
+        vertList[2]  = getVertexInfo(cornerPos[2],cornerPos[3])
+        print("T2")
     if (edgeTable[cubeIndex] & 8):    
-        vertList[3]  = [0,1,0] 
+        vertList[3]  = getVertexInfo(cornerPos[3],cornerPos[0]) 
+        print("T3")
     if (edgeTable[cubeIndex] & 16):   
-        vertList[4]  = [2,0,1] 
+        vertList[4]  = getVertexInfo(cornerPos[4],cornerPos[5])
+        print("T4")
     if (edgeTable[cubeIndex] & 32):   
-        vertList[5]  = [2,1,2] 
+        vertList[5]  = getVertexInfo(cornerPos[5],cornerPos[6])
+        print("T5")
     if (edgeTable[cubeIndex] & 64):   
-        vertList[6]  = [2,2,1] 
+        vertList[6]  = getVertexInfo(cornerPos[6],cornerPos[7])
+        print("T6")
     if (edgeTable[cubeIndex] & 128):  
-        vertList[7]  = [2,1,0]
+        vertList[7]  = getVertexInfo(cornerPos[7],cornerPos[4])
+        print("T7")
     if (edgeTable[cubeIndex] & 256):  
-        vertList[8]  = [1,0,0] 
+        vertList[8]  = getVertexInfo(cornerPos[0],cornerPos[4])
+        print("T8")
     if (edgeTable[cubeIndex] & 512):  
-        vertList[9]  = [1,0,2] 
+        vertList[9]  = getVertexInfo(cornerPos[1],cornerPos[5])
+        print("T9")
     if (edgeTable[cubeIndex] & 1024): 
-        vertList[10] = [1,2,2] 
+        vertList[10] = getVertexInfo(cornerPos[2],cornerPos[6])
+        print("T10")
     if (edgeTable[cubeIndex] & 2048): 
-        vertList[11] = [1,2,0] 
+        vertList[11] = getVertexInfo(cornerPos[3],cornerPos[7])
+        print("T11")
 
     # print("offset",offset)
     # print("triTable", triTable[cubeIndex])
@@ -473,7 +472,7 @@ if __name__ == "__main__":
     # createVoxel((1,2,3))
     # Generate a 10*10*10 3D texture
     testImageArray = []
-    testImageArray = [[[-1, 0], [-1, -1]], [[-1, -1], [-1, -1]]]
+    testImageArray = [[[-1,0], [-1, -1]], [[-1, -1], [-1, -1]]]
     print("generating data")
     # testImageArray = [
     #     [[-1, -1, -1, -1], [-1, 0, 0, -1], [-1, 0, 0, -1], [-1, 0, 0, -1]],
