@@ -49,7 +49,7 @@ def genTriangles(triangles, name="marching cubes"):
         bm.faces.new( [bm.verts[i+0], bm.verts[i+1],bm.verts[i+2]])
         debugCounter+=1
         if(debugCounter%debugSize==0):
-            print("Created triangles",debugCounter)
+            print("Created triangles",debugCounter,"/",len(bm.verts/3))
 
     if bpy.context.mode == 'EDIT_MESH':
         bmesh.update_edit_mesh(obj.data)
@@ -70,18 +70,23 @@ def genTriangles(triangles, name="marching cubes"):
 def imagesToMarchingInefficient(image3D):
     # print("image",image3D)
     print("starting marching cube alg")
+    debugCounter = 0
+    debugSize = 50000
     triangles = []
-    for xValue in range(0,len(image3D)-1,2):
-        for yValue in range(0,len(image3D[xValue])-1,2):
-            for zValue in range(0,len(image3D[xValue][yValue])-1,2):
+    for xValue in range(0,len(image3D)-1):
+        for yValue in range(0,len(image3D[xValue])-1):
+            for zValue in range(0,len(image3D[xValue][yValue])-1):
                 # get the neighboring vertices/pixels
                 cubeVerts=[]
                 for i in range(8):
-                    cubeVerts.append(image3D[cornerPos[i][0]][cornerPos[i][1]][cornerPos[i][2]])
+                    cubeVerts.append(image3D[xValue+cornerPos[i][0]][yValue+cornerPos[i][1]][zValue+cornerPos[i][2]])
                 # print("cubeVerts:",cubeVerts)
                 # Offset is for moving the marching cube result to the correct cell
                 offset = numpy.array([xValue, yValue, zValue])
                 triangles = placeMarchingCube(cubeVerts, triangles, offset)
+                debugCounter+=1
+                if(debugCounter%debugSize==0):
+                    print("marching cube computed:",debugCounter)
     print("ended marching cube alg")
     # print("triangles",triangles)
     genTriangles(triangles)
@@ -384,14 +389,17 @@ def placeMarchingCube(cubeVerts, triangles, offset):
     #  Figure out the index for the vertex table and which vertices should be created
     cubeIndex = 0
     for i in range(8):
-        if(cubeVerts[i]<0):
+        if(cubeVerts[i]>0):
             cubeIndex |= 1 << i
     # print("cube index", cubeIndex, bin(cubeIndex))
 
     # Cube is entirely in/out of the surface
-    # if edgeTable[cubeIndex] == 0: return []
+    if edgeTable[cubeIndex] == 0: 
+        # print("ending",cubeIndex,cubeVerts)
+        return triangles
+    # print("continuing",cubeIndex,cubeVerts)
     
-    # TODO: Bug is probably somewhere here?
+
     def getVertexInfo(p1,p2):
         # print(p2,p1)
         # print(p2+p1)
@@ -442,13 +450,16 @@ def placeMarchingCube(cubeVerts, triangles, offset):
     #Create the triangle
     # triangles = []
     #for (i=0;triTable[cubeIndex][i]!=-1;i+=3) {
+    # offset*=0.5
+    tempOffset = offset.astype(float)
+    # tempOffset*=0.5
     i=0
     # Create the triangles using the vert list from before 
     while triTable[cubeIndex][i] != -1:
         triangles.append([
-            vertList[triTable[cubeIndex][i  ]]+offset, 
-            vertList[triTable[cubeIndex][i+1]]+offset,
-            vertList[triTable[cubeIndex][i+2]]+offset
+            vertList[triTable[cubeIndex][i  ]]+tempOffset, 
+            vertList[triTable[cubeIndex][i+1]]+tempOffset,
+            vertList[triTable[cubeIndex][i+2]]+tempOffset
             ])
         i+=3
     # print("triangles", triangles)
@@ -482,7 +493,7 @@ if __name__ == "__main__":
     # createVoxel((1,2,3))
     # Generate a 10*10*10 3D texture
     testImageArray = []
-    # testImageArray = [[[0,0], [0, 0]], [[0, -1], [-1, -1]]]
+    # testImageArray = [[[-1,0], [-1, -1]], [[-1, -1], [-1, -1]]]
     print("generating data")
     # testImageArray = [
     #     [[-1, -1, -1, -1], [-1, 0, 0, -1], [-1, 0, 0, -1], [-1, 0, 0, -1]],
@@ -498,9 +509,9 @@ if __name__ == "__main__":
     def implicitHeart(x, y, z):
         return (math.pow((2 * x*x + y*y + z*z - 1.0), 3) -
                 (0.1*x*x + y*y)*z*z*z)
-    xMax = 16
-    yMax = 16
-    zMax = 16
+    xMax = 128
+    yMax = 128
+    zMax = 128
     debugCounter=0
     debugAmount=100000
     # for x in range(xMax):
@@ -513,20 +524,27 @@ if __name__ == "__main__":
             for z in range(-zMax,zMax):
                 # zArray.append(0)
                 zArray.append(implicitHeart((2*x)/(xMax), (2*y)/(yMax), (2*z)/(zMax)))
+                # value = implicitHeart((2*x)/(xMax), (2*y)/(yMax), (2*z)/(zMax))
                 # zArray.append(implicitSphere((2*x)/(xMax), (2*y)/(yMax), (2*z)/(zMax)))
-                # zArray.append(randint(-1,0))
+                # if(value<0):
+                #     zArray.append(-1)
+                # elif(value>0):
+                #     zArray.append(1)
+                # else:
+                #     zArray.append(0)
+                # zArray.append(randint(-1,1))
                 debugCounter+=1
                 if(debugCounter%debugAmount==0):
-                    print("genrated",debugCounter)
+                    print("genrated",debugCounter,"/",(2*xMax)**3)
             yArray.append(zArray)
             # yArray.append(randint(-1,1))
         testImageArray.append(yArray)
     print("generated data")
     # print(testImageArray)
-    # print(testImageArray)
+    # print(len(testImageArray))
     # place voxels based on that 10*10*10 array
     imagesToMarchingInefficient(testImageArray)
-    imagesToVoxelsInefficient(testImageArray)
+    # imagesToVoxelsInefficient(testImageArray)
     # testImage = [[[0,0],[1,1]],[[1,1],[1,0]]]
     
     stopTime = time.time()
