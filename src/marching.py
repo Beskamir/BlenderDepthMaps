@@ -42,9 +42,14 @@ def genTriangles(triangles, name="marching cubes"):
     print("Ensuring lookup table.")
     bm.verts.ensure_lookup_table()
 
+    debugCounter = 0
+    debugSize = 50000
     # Create the faces for the object
     for i in range(0,len(bm.verts),3):
         bm.faces.new( [bm.verts[i+0], bm.verts[i+1],bm.verts[i+2]])
+        debugCounter+=1
+        if(debugCounter%debugSize==0):
+            print("Created triangles",debugCounter)
 
     if bpy.context.mode == 'EDIT_MESH':
         bmesh.update_edit_mesh(obj.data)
@@ -52,7 +57,7 @@ def genTriangles(triangles, name="marching cubes"):
         bm.to_mesh(obj.data)
     obj.data.update()
     bm.free
-
+    print("Created shape")
     # Merge overlapping vertices once everything's generated
     bpy.ops.object.editmode_toggle()
     bpy.ops.mesh.select_all(action='SELECT')
@@ -384,53 +389,53 @@ def placeMarchingCube(cubeVerts, triangles, offset):
     # print("cube index", cubeIndex, bin(cubeIndex))
 
     # Cube is entirely in/out of the surface
-    if edgeTable[cubeIndex] == 0: return []
+    # if edgeTable[cubeIndex] == 0: return []
     
     # TODO: Bug is probably somewhere here?
     def getVertexInfo(p1,p2):
-        print(p2,p1)
-        print(p2+p1)
-        return (p2+p1)
+        # print(p2,p1)
+        # print(p2+p1)
+        return (p2+p1)*0.5
 
     # TODO: maybe optimize this a bit?
     vertList=[[]]*12
 	# # Find the vertices where the surface intersects the cube
     if (edgeTable[cubeIndex] & 1):    
         vertList[0]  = getVertexInfo(cornerPos[0],cornerPos[1])
-        print("T0")
+        # print("T0")
     if (edgeTable[cubeIndex] & 2):    
         vertList[1]  = getVertexInfo(cornerPos[1],cornerPos[2]) 
-        print("T1")
+        # print("T1")
     if (edgeTable[cubeIndex] & 4):   
         vertList[2]  = getVertexInfo(cornerPos[2],cornerPos[3])
-        print("T2")
+        # print("T2")
     if (edgeTable[cubeIndex] & 8):    
         vertList[3]  = getVertexInfo(cornerPos[3],cornerPos[0]) 
-        print("T3")
+        # print("T3")
     if (edgeTable[cubeIndex] & 16):   
         vertList[4]  = getVertexInfo(cornerPos[4],cornerPos[5])
-        print("T4")
+        # print("T4")
     if (edgeTable[cubeIndex] & 32):   
         vertList[5]  = getVertexInfo(cornerPos[5],cornerPos[6])
-        print("T5")
+        # print("T5")
     if (edgeTable[cubeIndex] & 64):   
         vertList[6]  = getVertexInfo(cornerPos[6],cornerPos[7])
-        print("T6")
+        # print("T6")
     if (edgeTable[cubeIndex] & 128):  
         vertList[7]  = getVertexInfo(cornerPos[7],cornerPos[4])
-        print("T7")
+        # print("T7")
     if (edgeTable[cubeIndex] & 256):  
         vertList[8]  = getVertexInfo(cornerPos[0],cornerPos[4])
-        print("T8")
+        # print("T8")
     if (edgeTable[cubeIndex] & 512):  
         vertList[9]  = getVertexInfo(cornerPos[1],cornerPos[5])
-        print("T9")
+        # print("T9")
     if (edgeTable[cubeIndex] & 1024): 
         vertList[10] = getVertexInfo(cornerPos[2],cornerPos[6])
-        print("T10")
+        # print("T10")
     if (edgeTable[cubeIndex] & 2048): 
         vertList[11] = getVertexInfo(cornerPos[3],cornerPos[7])
-        print("T11")
+        # print("T11")
 
     # print("offset",offset)
     # print("triTable", triTable[cubeIndex])
@@ -458,11 +463,16 @@ def createVoxel(position):
 
 # Given a 3D array of 0 and 1's it'll place a voxel in every cell that has a 1 in it
 def imagesToVoxelsInefficient(image3D):
+    debugCounter=0
+    debugSize=25
     for xValue in range(len(image3D)):
         for yValue in range(len(image3D[xValue])):
             for zValue in range(len(image3D[xValue][yValue])):
                 if(image3D[xValue][yValue][zValue]<0):
                     createVoxel((xValue,yValue,zValue))
+                if(debugCounter%debugSize==0):
+                    print("voxel",debugCounter)
+                debugCounter+=1
 
 
 if __name__ == "__main__":
@@ -472,7 +482,7 @@ if __name__ == "__main__":
     # createVoxel((1,2,3))
     # Generate a 10*10*10 3D texture
     testImageArray = []
-    testImageArray = [[[-1,0], [-1, -1]], [[-1, -1], [-1, -1]]]
+    # testImageArray = [[[0,0], [0, 0]], [[0, -1], [-1, -1]]]
     print("generating data")
     # testImageArray = [
     #     [[-1, -1, -1, -1], [-1, 0, 0, -1], [-1, 0, 0, -1], [-1, 0, 0, -1]],
@@ -488,26 +498,31 @@ if __name__ == "__main__":
     def implicitHeart(x, y, z):
         return (math.pow((2 * x*x + y*y + z*z - 1.0), 3) -
                 (0.1*x*x + y*y)*z*z*z)
-    xMax = 2 
-    yMax = 2
-    zMax = 2
+    xMax = 16
+    yMax = 16
+    zMax = 16
+    debugCounter=0
+    debugAmount=100000
     # for x in range(xMax):
-    # # for x in range(-xMax,xMax):
-    #     yArray = []
-    #     for y in range(yMax):
-    #     # for y in range(-yMax,yMax):
-    #         zArray = []
-    #         for z in range(zMax):
-    #         # for z in range(-zMax,zMax):
-    #             # zArray.append(0)
-    #             # zArray.append(implicitHeart((2*x)/(xMax), (2*y)/(yMax), (2*z)/(zMax)))
-    #             # zArray.append(implicitSphere((2*x)/(xMax), (2*y)/(yMax), (2*z)/(zMax)))
-    #             zArray.append(randint(-1,1))
-    #         yArray.append(zArray)
-    #         # yArray.append(randint(-1,1))
-    #     testImageArray.append(yArray)
+    for x in range(-xMax,xMax):
+        yArray = []
+        # for y in range(yMax):
+        for y in range(-yMax,yMax):
+            zArray = []
+            # for z in range(zMax):
+            for z in range(-zMax,zMax):
+                # zArray.append(0)
+                zArray.append(implicitHeart((2*x)/(xMax), (2*y)/(yMax), (2*z)/(zMax)))
+                # zArray.append(implicitSphere((2*x)/(xMax), (2*y)/(yMax), (2*z)/(zMax)))
+                # zArray.append(randint(-1,0))
+                debugCounter+=1
+                if(debugCounter%debugAmount==0):
+                    print("genrated",debugCounter)
+            yArray.append(zArray)
+            # yArray.append(randint(-1,1))
+        testImageArray.append(yArray)
     print("generated data")
-    print(testImageArray)
+    # print(testImageArray)
     # print(testImageArray)
     # place voxels based on that 10*10*10 array
     imagesToMarchingInefficient(testImageArray)
