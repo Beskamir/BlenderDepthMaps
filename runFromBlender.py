@@ -8,8 +8,14 @@
 
 import os
 import sys
+
+# The filesDir variable may need to be customized depending on the add-on's location on your device, as well as where you open Blender from.
  
-# This field needs to be customized depending on the add-on's location on your device
+# !!!!!!!        PLEASE DON'T REMOVE THE COMMENTED-OUT filesDir OPTIONS BELOW!        !!!!!!!
+# The first time this add-on is run/installed, Blender needs to be run in administrator mode.
+# That means that "../src" will not work as a path, and we have to use our custom ones.
+
+#filesDir = "D:\\Documents\\01University\\CPSC_589\\Project\\BlenderDepthMaps\\src" #Chris
 filesDir = "../src"
  
 initFile = "__init__.py" 

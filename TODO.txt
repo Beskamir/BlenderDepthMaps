@@ -9,6 +9,8 @@ Image scaling.
 
 Once the 3D-point-array-generating function works, try to optimize it a bit more.
 
+Image editing.
+
 =======================================
 
 NURBS fitting and/or marching cubes.
