@@ -62,10 +62,10 @@ def genTriangles(triangles, name="marching cubes"):
     bm.free
     print("Created shape")
     # Merge overlapping vertices once everything's generated
-    # bpy.ops.object.editmode_toggle()
-    # bpy.ops.mesh.select_all(action='SELECT')
-    # bpy.ops.mesh.remove_doubles(threshold=0.0001)
-    # bpy.ops.object.editmode_toggle()
+    bpy.ops.object.editmode_toggle()
+    bpy.ops.mesh.select_all(action='SELECT')
+    bpy.ops.mesh.remove_doubles(threshold=0.0001)
+    bpy.ops.object.editmode_toggle()
     return obj
 
 # Based on voxelize.py code
@@ -109,7 +109,7 @@ def genTrianglesFromVertices(vertices, faces, name="marching cubes"):
         bm.faces.new( [bm.verts[i+0], bm.verts[i+1],bm.verts[i+2]])
         debugCounter+=1
         if(debugCounter%debugSize==0):
-            print("Created triangles",debugCounter,"/",len(bm.verts/3))
+            print("Created triangles",debugCounter,"/",len(bm.verts)/3)
 
     if bpy.context.mode == 'EDIT_MESH':
         bmesh.update_edit_mesh(obj.data)
@@ -119,10 +119,10 @@ def genTrianglesFromVertices(vertices, faces, name="marching cubes"):
     bm.free
     print("Created shape")
     # Merge overlapping vertices once everything's generated
-    bpy.ops.object.editmode_toggle()
-    bpy.ops.mesh.select_all(action='SELECT')
-    bpy.ops.mesh.remove_doubles(threshold=0.0001)
-    bpy.ops.object.editmode_toggle()
+    # bpy.ops.object.editmode_toggle()
+    # bpy.ops.mesh.select_all(action='SELECT')
+    # bpy.ops.mesh.remove_doubles(threshold=0.0001)
+    # bpy.ops.object.editmode_toggle()
     return obj
 
 #This is more effiecent but it requires getting external libraries to work in blender, to do the easiest way is to install scikit image and then delete blender's python folder forcing it to use the system's python
@@ -130,7 +130,9 @@ def genTrianglesFromVertices(vertices, faces, name="marching cubes"):
 from skimage import measure
 def efficientMarchingCubes(image3D):
     print("starting efficient marching cube alg")
-    verts, faces, normals, values = measure.marching_cubes_lewiner(image3D, level=0)
+    verts, faces, normals, values = measure.marching_cubes_lewiner(numpy.array(image3D))
+    # For some reason the bottom version fixes it for implicit surfaces but breaks it on the 3d textures from the images
+    # verts, faces, normals, values = measure.marching_cubes_lewiner(numpy.array(image3D), level=0)
     print("finished generating marching cubes")
     # print("verts\n",verts,"\nfaces\n",faces,"\nnormals\n",normals,"\nvalues\n",values)
     genTrianglesFromVertices(verts, faces)
@@ -599,15 +601,15 @@ if __name__ == "__main__":
             # for z in range(zMax):
             for z in range(-zMax,zMax):
                 # zArray.append(0)
-                zArray.append(implicitHeart((2*x)/(xMax), (2*y)/(yMax), (2*z)/(zMax)))
-                # value = implicitHeart((2*x)/(xMax), (2*y)/(yMax), (2*z)/(zMax))
+                # zArray.append(implicitHeart((2*x)/(xMax), (2*y)/(yMax), (2*z)/(zMax)))
+                value = implicitHeart((2*x)/(xMax), (2*y)/(yMax), (2*z)/(zMax))
                 # zArray.append(implicitSphere((2*x)/(xMax), (2*y)/(yMax), (2*z)/(zMax)))
-                # if(value<0):
-                #     zArray.append(-1)
-                # elif(value>0):
-                #     zArray.append(1)
-                # else:
-                #     zArray.append(0)
+                if(value<0):
+                    zArray.append(-1)
+                elif(value>0):
+                    zArray.append(1)
+                else:
+                    zArray.append(0)
                 # zArray.append(randint(-1,1))
                 debugCounter+=1
                 if(debugCounter%debugAmount==0):
