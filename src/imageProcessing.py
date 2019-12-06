@@ -3,6 +3,7 @@ import os
 import math
 import numpy
 import loadImage
+
 #from .config import IMAGES_DIR
 
 #References:
@@ -160,6 +161,23 @@ def marzullo(upper, lower):
             bestEnd = table[i+1][0] # Will never go out of bounds, since count>best is impossible for last boundary, which would be of type +1
     return (bestStart, bestEnd, best) 
 
+def nearestNeighbour(pixels, w2, h2) {
+    w1 = pixels.shape[1]
+    h1 = pixels.shape[0]
+    newImage = numpy.empty((h2,w2,))
+    int[] temp = new int[w2*h2] ;
+    double x_ratio = w1/(double)w2 ;
+    double y_ratio = h1/(double)h2 ;
+    double px, py ; 
+    for (int i=0;i<h2;i++) {
+        for (int j=0;j<w2;j++) {
+            px = Math.floor(j*x_ratio) ;
+            py = Math.floor(i*y_ratio) ;
+            temp[(i*w2)+j] = pixels[(int)((py*w1)+px)] ;
+        }
+    }
+    return temp ;
+}
 
 class imageProcessor:
     # maxWidth is not actually used at the moment, but I plan to do something with it if there's time later.
@@ -204,6 +222,56 @@ class imageProcessor:
             # Crop the image by slicing from the first index of nonzeroRows to the last, and the same for columns
             image = image[nonzeroRows[0]:nonzeroRows[-1]+1, nonzeroCols[0]:nonzeroCols[-1]+1]
 
+            # "Save progress" for this image.
+            self.images2D[face] = image
+
+
+        X_AXIS = 0
+        Y_AXIS = 1
+        Z_AXIS = 2
+
+        # After cropping the images, we need to resize them to be consistent.
+        minX = min(self.images2D[LEFT_FACE].shape[1], self.images2D[RIGHT_FACE].shape[1], self.images2D[TOP_FACE].shape[0], self.images2D[BOTTOM_FACE].shape[0])
+        minY = min(self.images2D[FRONT_FACE].shape[1], self.images2D[BACK_FACE].shape[1], self.images2D[TOP_FACE].shape[1], self.images2D[BOTTOM_FACE].shape[1])
+        minZ = min(self.images2D[LEFT_FACE].shape[0], self.images2D[RIGHT_FACE].shape[0], self.images2D[FRONT_FACE].shape[0], self.images2D[BACK_FACE].shape[0])
+        
+        # I need to revisit this for the general case a bit later, but essentially:
+        #   - using minX, minY, and minZ, calculate the scaling that would need to be done on each axis of each image.
+        #   - whichever scale factor is smaller, choose that one
+        #   - Then, don't scale the images yet, but calculate what the size of each axis WOULD become.
+        #   - If the LARGEST of these dimensions is greater than the maxWidth, get another scalefactor that you will apply to ALL other scalefactors.
+        #   - Finally, scale the images for real.
+        # After doing this, you need to perform the "micro-cropping" until the images' dimensions on all axes line up exactly.
+        
+        # BUT FOR NOW, WE'LL USE THE ASSUMPTION THAT THE IMAGES ARE ALL OF THE SAME SCALE!
+        # CHANGE THIS AFTER THE DEMO!
+
+        maxX = max(self.images2D[LEFT_FACE].shape[1], self.images2D[RIGHT_FACE].shape[1], self.images2D[TOP_FACE].shape[0], self.images2D[BOTTOM_FACE].shape[0])
+        maxY = max(self.images2D[FRONT_FACE].shape[1], self.images2D[BACK_FACE].shape[1], self.images2D[TOP_FACE].shape[1], self.images2D[BOTTOM_FACE].shape[1])
+        maxZ = max(self.images2D[LEFT_FACE].shape[0], self.images2D[RIGHT_FACE].shape[0], self.images2D[FRONT_FACE].shape[0], self.images2D[BACK_FACE].shape[0])
+
+        maxWidth = self.maxWidth
+        scaleX = maxWidth/maxX
+        scaleY = maxWidth/maxY
+        scaleZ = maxWidth/maxZ
+
+        scaleFac = min(1, scaleX, scaleY, scaleZ)
+        targetX = targetY = targetZ = 0
+        if scaleFac < 1:
+            targetX = int(scaleFac * maxX)
+            targetY = int(scaleFac * maxY)
+            targetZ = int(scaleFac * maxZ)
+
+        for i in range(4):
+            self.images2D[FRONT_FACE][:,:,i] = sk_resize(self.images2D[FRONT_FACE][:,:,i], (targetZ, targetY), clip=False, preserve_range=True, anti_aliasing = False)
+            self.images2D[BACK_FACE][:,:,i] = sk_resize(self.images2D[FRONT_FACE][:,:,i], (targetZ, targetY), clip=False, preserve_range=True, anti_aliasing = False)
+            self.images2D[LEFT_FACE][:,:,i] = sk_resize(self.images2D[FRONT_FACE][:,:,i], (targetZ, targetX), clip=False, preserve_range=True, anti_aliasing = False)
+            self.images2D[RIGHT_FACE][:,:,i] = sk_resize(self.images2D[FRONT_FACE][:,:,i], (targetZ, targetX), clip=False, preserve_range=True, anti_aliasing = False)
+            self.images2D[TOP_FACE][:,:,i] = sk_resize(self.images2D[FRONT_FACE][:,:,i], (targetX, targetY), clip=False, preserve_range=True, anti_aliasing = False)
+            self.images2D[BOTTOM_FACE][:,:,i] = sk_resize(self.images2D[FRONT_FACE][:,:,i], (targetX, targetY), clip=False, preserve_range=True, anti_aliasing = False)
+
+        # Once all the images have been scalled and crop, we can calculate the transparency-space on each side.
+        for face in FACES:
             newAlphas = image[:,:,3]
 
             # Access the image's alpha and create an array of bools that state whether the alpha is zero or not 
