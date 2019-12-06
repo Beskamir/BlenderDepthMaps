@@ -567,22 +567,45 @@ class imageProcessor:
                         #print("\n][][][][][\n")'''
                     '''
                     '''
+                    # Make sure we don't overwrite a "definitive" value from a previous face's phase
+                    makeOutside = lambda x: abs(x)
+                    if INSIDE == 1 and OUTSIDE == -1:
+                        makeOutside = lambda x: -abs(x)
+
                     # Alpha check
                     if pixelAlpha > 0:
-                        while inBounds(index) and depth < depthCap:
-                            # Make sure we don't overwrite a "definitive" value from first phase
-                            if self.object3D[index] == INSIDE:
-                                self.object3D[index] = OUTSIDE # OUTSIDE = -1
-                            index = add(index, iteration3D_Dictionary[face]["inwards"])
-                            depth += 1
-                            # Make sure we don't overwrite a "definitive" value from first phase
+                        endIndex = add(index, constMult(depthCap, iteration3D_Dictionary[face]["inwards"]))
+                        x1 = int(index[0])
+                        x2 = int(endIndex[0])
+                        y1 = int(index[1])
+                        y2 = int(endIndex[1])
+                        z1 = int(index[2])
+                        z2 = int(endIndex[2])
+                        #rint("INDICES:", x1, x2, y1, y2, z1, z2)
+                        self.object3D[x1:x2, y1:y2, z1:z2] = makeOutside(self.object3D[x1:x2, y1:y2, z1:z2] )
+                        index = add((x2,y2,z2), iteration3D_Dictionary[face]["inwards"])
                         if inBounds(index):
+                            #print("BOUNDARY:", index)
                             self.object3D[index] = BOUNDARY # BOUNDARY = 0
                     elif pixelAlpha == 0:
-                        while inBounds(index):
+                        allDepth = xLen
+                        if face == LEFT_FACE or face == RIGHT_FACE:
+                            allDepth = yLen
+                        if face == TOP_FACE or face == BOTTOM_FACE:
+                            allDepth = zLen
+
+                        endIndex = add(index, constMult(allDepth,iteration3D_Dictionary[face]["inwards"]))
+                        x1 = int(index[0])
+                        x2 = int(endIndex[0])
+                        y1 = int(index[1])
+                        y2 = int(endIndex[1])
+                        z1 = int(index[2])
+                        z2 = int(endIndex[2])
+                        self.object3D[x1:x2, y1:y2, z1:z2] = makeOutside(self.object3D[x1:x2, y1:y2, z1:z2] )                        
+                        '''while inBounds(index):
                             if self.object3D[index] == INSIDE:
-                                self.object3D[index] = OUTSIDE # OUTSIDE = -1
-                            index = add(index, iteration3D_Dictionary[face]["inwards"])
+                                self.object3D[index] = OUTSIDE # OUTSIDE'''
+                            
                 
                     '''
                     '''
