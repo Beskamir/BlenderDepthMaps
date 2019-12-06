@@ -1,5 +1,7 @@
 import bpy
-from bpy.props import (StringProperty
+import numpy
+from bpy.props import (StringProperty,
+                        IntProperty
                        )
 from bpy.types import (
                        Operator
@@ -7,6 +9,7 @@ from bpy.types import (
 
 import imageProcessing
 from voxelize import pointsToVoxels
+from marching import imagesToMarchingInefficient
 
 # Class for the button that, when clicked, calls the functions needed to generate the mesh.
 # The separator "_OT_" must appear in the name as of Blender 2.8
@@ -20,6 +23,7 @@ class WM_OT_depthMapsUI_Operator_Generate(Operator):
     right_face_file : StringProperty(name="Filename of right depth map.")
     top_face_file : StringProperty(name="Filename of top depth map.")
     bottom_face_file : StringProperty(name="Filename of bottom depth map.")
+    max_width : IntProperty(name="Maximum width")
 
     # Function that runs on click
     def execute(self, context):
@@ -28,7 +32,12 @@ class WM_OT_depthMapsUI_Operator_Generate(Operator):
             files.append(getattr(self, face+"_face_file"))
         print("FILES:", files)
         imgp = imageProcessing.imageProcessor(files)
-        pointsToVoxels(imgp.points3D)
+        map = imgp.generateArray3D()
+        #imagesToMarchingInefficient(map)
+        pointsWhere = numpy.argwhere(map == 0)
+        print("Map shape:", pointsWhere.shape)
+        pointsToVoxels({"p": pointsWhere})
+        #pointsToVoxels(imgp.points3D)
         #print("\n~\nACTIVE OBJECT TYPE:\n",bpy.context.active_object.type, end="\n~\n\n")
 
         return {'FINISHED'}

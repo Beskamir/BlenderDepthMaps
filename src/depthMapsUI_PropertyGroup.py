@@ -1,6 +1,7 @@
 import bpy
 
-from bpy.props import (StringProperty
+from bpy.props import (StringProperty,
+                        IntProperty
                        )
 from bpy.types import (
                        PropertyGroup,
@@ -117,6 +118,12 @@ class depthMapsUI_PropertyGroup(PropertyGroup):
         default="",
         maxlen=1024,
         subtype='FILE_PATH')
+    max_width : IntProperty(
+        name="Max width along any axis.",
+        description="Sets a constraint on the size of the generated voxel object.",
+        default=1024
+    )
+
 
     
 

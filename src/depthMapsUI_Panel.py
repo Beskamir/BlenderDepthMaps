@@ -38,6 +38,8 @@ class OBJECT_PT_depthMapsUI_Panel(Panel):
             layout.prop(currentProps, "right_face_file", text="Right depth map file:")
             layout.prop(currentProps, "top_face_file", text="Top depth map file:")
             layout.prop(currentProps, "bottom_face_file", text="Bottom depth map file:")
+            layout.label(text="Max object width/length/height (in voxels):")
+            layout.prop(currentProps, "max_width")
 
         layout.operator("depthmaps.clear_depth_maps")
         propsToSet.front_face_file = currentProps.front_face_file
@@ -46,6 +48,7 @@ class OBJECT_PT_depthMapsUI_Panel(Panel):
         propsToSet.right_face_file = currentProps.right_face_file
         propsToSet.top_face_file = currentProps.top_face_file
         propsToSet.bottom_face_file = currentProps.bottom_face_file
+        propsToSet.max_width = currentProps.max_width
         
         '''print("\n\nPROPS:")
         for attr in dir(context.active_object.data):

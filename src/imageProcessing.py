@@ -483,6 +483,123 @@ class imageProcessor:
         #self.points3D = numpy.unique(self.points3D, axis=0)
         return
 
+    def generateArray3D(self):
+        # For ease of typing
+        zLen = self.zLen
+        yLen = self.yLen
+        xLen = self.xLen
+        
+
+        # A quick "in bounds" function that states whether a coordinate is within the dimensions of our 3D array.
+        inBounds = lambda coord: coord[0] >= 0 and coord[0] < xLen and coord[1] >= 0 and coord[1] < yLen and coord[2] >= 0 and coord[2] < zLen
+        # Lambda for elementwise adding two tuples of length 3
+        add = lambda x, y: (x[0] + y[0], x[1] + y[1], x[2] + y[2])
+        constMult = lambda k, vec: (k*vec[0], k*vec[1], k*vec[2])
+
+        # Dictionary of "starting positions" for iteration for each face.
+        # For each pixel in each face's image, we'll traverse "inwards" through the 3D array.
+        # So, for the coordinates corresponding to pixel selection, we'll start at 0 and 0 (e.g. for FACE_FRONT, y = 0 and z = 0)
+        # For the coordinate corresponding to the "depth" coordinate for the face, we'll start at either 0 or the "max" for that direction.
+        # E.g. for FRONT_FACE, we start at x = (xLen - 1) and end at x=0.
+        startDict = {
+            FRONT_FACE: (xLen-1, 0, 0),
+            LEFT_FACE: (0,0,0),
+            BACK_FACE: (0,yLen-1,0),
+            RIGHT_FACE: (xLen-1,yLen-1,0),
+            TOP_FACE: (xLen-1,0,zLen-1),
+            BOTTOM_FACE: (xLen-1,yLen-1,0)
+        }
+        # We'll do two phases.
+        # First, we'll do all "definitive" cells, with alpha values zero or one.
+        # Then, we'll do all partial-alpha cells IF there's no conflict.
+        # March, for each pixel on each "face" of the surrounding cube, inwards and replace 1's with 0's (edge) and -1's (outside) values wherever alpha is strictly 0 or 1.
+        
+        OUTSIDE = 1
+        BOUNDARY = 0
+        INSIDE = -1
+        self.object3D = numpy.full((xLen, yLen, zLen), INSIDE)
+        
+        for face in FACES:
+            highestFloat = self.depthDictionary[face]["highestFloat"]
+            lowestFloat = self.depthDictionary[face]["lowestFloat"]
+            highestCellDepth = self.depthDictionary[face]["highestCellDepth"]
+            lowestCellDepth = self.depthDictionary[face]["lowestCellDepth"]
+            depthRange = highestFloat - lowestFloat
+            if depthRange == 0.0:
+                print("REMINDER: ALLOW USER-INPUT MODIFICATION FOR CASE WHERE DEPTH RANGE MAPPING CANNOT BE AUTOMATICALLY DETERMINED!")
+                print("SETTING DEFAULT DEPTH RANGE AS TEMPORARY DEFAULT!")
+                depthRange = 1.0
+
+           
+
+            pixelXIndex = 0
+            pixelYIndex = 0
+
+            if depthRange <= 0:
+                # The actual logic happens deeper inside the while loop. Look for it below, marked with "#updateme"
+                print("REMINDER: ALLOW USER-INPUT MODIFICATION FOR CASE WHERE DEPTH RANGE MAPPING CANNOT BE AUTOMATICALLY DETERMINED!")
+                print("SETTING ALL VALUES TO 'MAX' AS TEMPORARY DEFAULT!")
+            index = startDict[face] # Convert into list so that it's mutable
+
+            while inBounds(index):
+                refIndexHoriz = index # Save current index before the "vert" and "inwards" coords are altered
+                while inBounds(index):
+                    refIndexVert = index # Save current index before the "inwards" coord is altered
+                    depth = 0
+                    
+                    pixelVal = self.images2D[face][pixelYIndex][pixelXIndex]
+                    # The negation is to represent the higher, darker pixels with higher/larger floats, to be consistent with other parts of this code
+                    pixelHeight = -pixelVal[0]
+                    pixelAlpha = pixelVal[3]
+                    if depthRange == 0:
+                        #updateme
+                        depthCap = highestCellDepth
+                    else:
+                        depthCap = round(((highestFloat-pixelHeight)*lowestCellDepth + (pixelHeight - lowestFloat)*highestCellDepth)/depthRange)
+                    '''if pixelAlpha > 0:
+                        #print("index:", index)
+                        #print("depthCap:", depthCap)
+                        depthToTraverse = constMult(depthCap, iteration3D_Dictionary[face]["inwards"])
+                        #print("depthToTraverse:", depthToTraverse)
+                        cubeIndex = add(index, depthToTraverse)
+                        #print("CubeIndex:", cubeIndex)
+                        points3D.append(cubeIndex)
+                        #print("\n][][][][][\n")'''
+                    '''
+                    '''
+                    # Alpha check
+                    if pixelAlpha > 0:
+                        while inBounds(index) and depth < depthCap:
+                            # Make sure we don't overwrite a "definitive" value from first phase
+                            if self.object3D[index] == INSIDE:
+                                self.object3D[index] = OUTSIDE # OUTSIDE = -1
+                            index = add(index, iteration3D_Dictionary[face]["inwards"])
+                            depth += 1
+                            # Make sure we don't overwrite a "definitive" value from first phase
+                        if inBounds(index):
+                            self.object3D[index] = BOUNDARY # BOUNDARY = 0
+                    elif pixelAlpha == 0:
+                        while inBounds(index):
+                            if self.object3D[index] == INSIDE:
+                                self.object3D[index] = OUTSIDE # OUTSIDE = -1
+                            index = add(index, iteration3D_Dictionary[face]["inwards"])
+                
+                    '''
+                    '''
+                    # reset "inwards" and increment "vert"
+                    index = add(refIndexVert, iteration3D_Dictionary[face]["vertical"])
+                    pixelYIndex += 1
+                # reset "vert" and "inwards" and increment "horiz"
+                index = add(refIndexHoriz, iteration3D_Dictionary[face]["horizontal"])
+                pixelXIndex += 1
+                pixelYIndex = 0
+                #print("Done a slice.")
+            
+            print("Done one face.")
+        #self.points3D = numpy.array(points3D)
+        #self.points3D = numpy.unique(self.points3D, axis=0)
+        return self.object3D
+
 
 
 
