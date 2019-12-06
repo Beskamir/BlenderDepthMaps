@@ -9,7 +9,7 @@ from bpy.types import (
 
 import imageProcessing
 from voxelize import pointsToVoxels
-from marching import imagesToMarchingInefficient
+from marching import imagesToMarchingInefficient, efficientMarchingCubes
 
 # Class for the button that, when clicked, calls the functions needed to generate the mesh.
 # The separator "_OT_" must appear in the name as of Blender 2.8
@@ -33,7 +33,8 @@ class WM_OT_depthMapsUI_Operator_Generate(Operator):
         print("FILES:", files)
         imgp = imageProcessing.imageProcessor(files)
         map = imgp.generateArray3D()
-        #imagesToMarchingInefficient(map)
+        # imagesToMarchingInefficient(map)
+        # efficientMarchingCubes(map)
         pointsWhere = numpy.argwhere(map == 0)
         print("Map shape:", pointsWhere.shape)
         pointsToVoxels({"p": pointsWhere})

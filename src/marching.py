@@ -125,7 +125,7 @@ def genTrianglesFromVertices(vertices, faces, name="marching cubes"):
     bpy.ops.object.editmode_toggle()
     return obj
 
-#TODO: This should be more effiecent but I'm not sure how to get external libraries to work in blender
+#This is more effiecent but it requires getting external libraries to work in blender, to do the easiest way is to install scikit image and then delete blender's python folder forcing it to use the system's python
 # uses https://scikit-image.org/docs/dev/api/skimage.measure.html#marching-cubes-lewiner for performance
 from skimage import measure
 def efficientMarchingCubes(image3D):
