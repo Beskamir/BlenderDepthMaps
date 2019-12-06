@@ -86,7 +86,7 @@ def imagesToMarchingInefficient(image3D):
                 triangles = placeMarchingCube(cubeVerts, triangles, offset)
                 debugCounter+=1
                 if(debugCounter%debugSize==0):
-                    print("marching cube computed:",debugCounter)
+                    print("marching cube computed:",debugCounter,"/",(len(image3D)-1)*(len(image3D[xValue])-1)*(len(image3D[xValue][yValue])-1))
     print("ended marching cube alg")
     # print("triangles",triangles)
     genTriangles(triangles)
@@ -509,9 +509,9 @@ if __name__ == "__main__":
     def implicitHeart(x, y, z):
         return (math.pow((2 * x*x + y*y + z*z - 1.0), 3) -
                 (0.1*x*x + y*y)*z*z*z)
-    xMax = 128
-    yMax = 128
-    zMax = 128
+    xMax = 32
+    yMax = 32
+    zMax = 32
     debugCounter=0
     debugAmount=100000
     # for x in range(xMax):
