@@ -15,6 +15,7 @@ import sys
 # The first time this add-on is run/installed, Blender needs to be run in administrator mode.
 # That means that "../src" will not work as a path, and we have to use our custom ones.
 
+#filesDir = "C:\\Users\\U1\\Documents\\01University\\CPSC_589\\Project\\BlenderDepthMaps\\src" #Chris2
 #filesDir = "D:\\Documents\\01University\\CPSC_589\\Project\\BlenderDepthMaps\\src" #Chris
 filesDir = "../src"
  

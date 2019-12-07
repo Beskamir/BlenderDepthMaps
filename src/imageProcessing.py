@@ -161,23 +161,35 @@ def marzullo(upper, lower):
             bestEnd = table[i+1][0] # Will never go out of bounds, since count>best is impossible for last boundary, which would be of type +1
     return (bestStart, bestEnd, best) 
 
-def nearestNeighbour(pixels, w2, h2) {
+def nearestNeighbour(pixels, h2, w2):
     w1 = pixels.shape[1]
     h1 = pixels.shape[0]
-    newImage = numpy.empty((h2,w2,))
-    int[] temp = new int[w2*h2] ;
-    double x_ratio = w1/(double)w2 ;
-    double y_ratio = h1/(double)h2 ;
-    double px, py ; 
+    newImage = numpy.empty((h2,w2,4))
+        
+    h_ratio = h1/h2
+    w_ratio = w1/w2
+
+    for channel in range(4):
+        iList = numpy.indices((h2, w2))
+        indicesToMap = iList.transpose((1,2,0))
+        getNearest = lambda p: pixels[math.floor(p[0]*h_ratio), math.floor(p[1]*w_ratio), channel]
+        newImage[:,:,channel] = getNearest(pixels)
+
+
+
+
+    '''f = lambda x: x[0] - x[1]
+    d = numpy.apply_along_axis(f, 2, c)
+
     for (int i=0;i<h2;i++) {
         for (int j=0;j<w2;j++) {
             px = Math.floor(j*x_ratio) ;
             py = Math.floor(i*y_ratio) ;
             temp[(i*w2)+j] = pixels[(int)((py*w1)+px)] ;
         }
-    }
-    return temp ;
-}
+    }'''
+    return newImage 
+
 
 class imageProcessor:
     # maxWidth is not actually used at the moment, but I plan to do something with it if there's time later.
@@ -224,6 +236,8 @@ class imageProcessor:
 
             # "Save progress" for this image.
             self.images2D[face] = image
+        for face in FACES:
+            print("Shape for img", face, ":", self.images2D[face].shape)
 
 
         X_AXIS = 0
@@ -251,27 +265,28 @@ class imageProcessor:
         maxZ = max(self.images2D[LEFT_FACE].shape[0], self.images2D[RIGHT_FACE].shape[0], self.images2D[FRONT_FACE].shape[0], self.images2D[BACK_FACE].shape[0])
 
         maxWidth = self.maxWidth
-        scaleX = maxWidth/maxX
-        scaleY = maxWidth/maxY
-        scaleZ = maxWidth/maxZ
+        scaleX = maxX/maxWidth
+        scaleY = maxY/maxWidth
+        scaleZ = maxZ/maxWidth
 
         scaleFac = min(1, scaleX, scaleY, scaleZ)
         targetX = targetY = targetZ = 0
-        if scaleFac < 1:
+        if scaleFac < 1 and False:
             targetX = int(scaleFac * maxX)
             targetY = int(scaleFac * maxY)
             targetZ = int(scaleFac * maxZ)
 
-        for i in range(4):
-            self.images2D[FRONT_FACE][:,:,i] = sk_resize(self.images2D[FRONT_FACE][:,:,i], (targetZ, targetY), clip=False, preserve_range=True, anti_aliasing = False)
-            self.images2D[BACK_FACE][:,:,i] = sk_resize(self.images2D[FRONT_FACE][:,:,i], (targetZ, targetY), clip=False, preserve_range=True, anti_aliasing = False)
-            self.images2D[LEFT_FACE][:,:,i] = sk_resize(self.images2D[FRONT_FACE][:,:,i], (targetZ, targetX), clip=False, preserve_range=True, anti_aliasing = False)
-            self.images2D[RIGHT_FACE][:,:,i] = sk_resize(self.images2D[FRONT_FACE][:,:,i], (targetZ, targetX), clip=False, preserve_range=True, anti_aliasing = False)
-            self.images2D[TOP_FACE][:,:,i] = sk_resize(self.images2D[FRONT_FACE][:,:,i], (targetX, targetY), clip=False, preserve_range=True, anti_aliasing = False)
-            self.images2D[BOTTOM_FACE][:,:,i] = sk_resize(self.images2D[FRONT_FACE][:,:,i], (targetX, targetY), clip=False, preserve_range=True, anti_aliasing = False)
+            self.images2D[FRONT_FACE] = nearestNeighbour(self.images2D[FRONT_FACE], targetZ, targetY)
+            self.images2D[BACK_FACE] = nearestNeighbour(self.images2D[FRONT_FACE], targetZ, targetY)
+            self.images2D[LEFT_FACE] = nearestNeighbour(self.images2D[FRONT_FACE], targetZ, targetX)
+            self.images2D[RIGHT_FACE] = nearestNeighbour(self.images2D[FRONT_FACE], targetZ, targetX)
+            self.images2D[TOP_FACE] = nearestNeighbour(self.images2D[FRONT_FACE], targetX, targetY)
+            self.images2D[BOTTOM_FACE] = nearestNeighbour(self.images2D[FRONT_FACE], targetX, targetY)
 
         # Once all the images have been scalled and crop, we can calculate the transparency-space on each side.
         for face in FACES:
+            image = self.images2D[face]
+            print("NEW shape for img", face, ":", image.shape)
             newAlphas = image[:,:,3]
 
             # Access the image's alpha and create an array of bools that state whether the alpha is zero or not 
@@ -283,8 +298,8 @@ class imageProcessor:
             bottomSpaces = (visibles!=0).argmax(axis=0)
             leftSpaces = (visibles!=0).argmax(axis=1)
             print("----------")
-            for s in [topSpaces, rightSpaces, bottomSpaces, leftSpaces]:
-                print("space shape:", s.shape)
+            '''for s in [topSpaces, rightSpaces, bottomSpaces, leftSpaces]:
+                print("space shape:", s.shape)'''
 
             '''
             # Now, we add a float component to the spaces based on the border pixel's transparency
@@ -308,8 +323,8 @@ class imageProcessor:
             }
 
             print("----------")
-            for side in SIDES:
-                print("space shape NEW:", self.spaces[face][side].shape)
+            '''for side in SIDES:
+                print("space shape NEW:", self.spaces[face][side].shape)'''
 
 
             self.images2D[face] = image
