@@ -4,6 +4,7 @@ import math
 import numpy
 import loadImage
 
+
 #from .config import IMAGES_DIR
 
 #References:
@@ -194,6 +195,7 @@ def nearestNeighbour(pixels, h2, w2):
 class imageProcessor:
     # maxWidth is not actually used at the moment, but I plan to do something with it if there's time later.
     def __init__(self, originalFilenames, maxWidth=1024):
+
         self.imageLoader = loadImage.loadImage()
         self.createArrays(originalFilenames, maxWidth)
 
@@ -568,6 +570,25 @@ class imageProcessor:
         #self.points3D = numpy.unique(self.points3D, axis=0)
         return
 
+    def getIndexRange(self, x1, y1, z1, x2, y2, z2):
+        xL = min(x1, x2)
+        xU = max(x1, x2)
+        yL = min(y1, y2)
+        yU = max(y1, y2)
+        zL = min(z1, z2)
+        zU = max(z1, z2)
+
+        if not (xL == xU and yL == yU and zL == zU):
+            if xL == xU:
+                xU += 1
+            if yL == yU:
+                yU += 1
+            if zL == zU:
+                zU += 1
+
+        return ((xL, yL, zL), (xU, yU, zU))
+
+
     def generateArray3D(self):
         # For ease of typing
         zLen = self.zLen
@@ -580,6 +601,7 @@ class imageProcessor:
         # Lambda for elementwise adding two tuples of length 3
         add = lambda x, y: (x[0] + y[0], x[1] + y[1], x[2] + y[2])
         constMult = lambda k, vec: (k*vec[0], k*vec[1], k*vec[2])
+        
 
         # Dictionary of "starting positions" for iteration for each face.
         # For each pixel in each face's image, we'll traverse "inwards" through the 3D array.
@@ -594,15 +616,16 @@ class imageProcessor:
             TOP_FACE: (xLen-1,0,zLen-1),
             BOTTOM_FACE: (xLen-1,yLen-1,0)
         }
-        # We'll do two phases.
-        # First, we'll do all "definitive" cells, with alpha values zero or one.
-        # Then, we'll do all partial-alpha cells IF there's no conflict.
-        # March, for each pixel on each "face" of the surrounding cube, inwards and replace 1's with 0's (edge) and -1's (outside) values wherever alpha is strictly 0 or 1.
         
         OUTSIDE = 1
         BOUNDARY = 0
         INSIDE = -1
         self.object3D = numpy.full((xLen, yLen, zLen), INSIDE)
+
+        # Make sure we don't overwrite a "definitive" value from a previous face's phase
+        makeOutside = lambda x: abs(x)
+        if INSIDE == 1 and OUTSIDE == -1:
+            makeOutside = lambda x: -abs(x)
         
         for face in FACES:
             highestFloat = self.depthDictionary[face]["highestFloat"]
@@ -610,10 +633,6 @@ class imageProcessor:
             highestCellDepth = self.depthDictionary[face]["highestCellDepth"]
             lowestCellDepth = self.depthDictionary[face]["lowestCellDepth"]
             depthRange = highestFloat - lowestFloat
-            if depthRange == 0.0:
-                print("REMINDER: ALLOW USER-INPUT MODIFICATION FOR CASE WHERE DEPTH RANGE MAPPING CANNOT BE AUTOMATICALLY DETERMINED!")
-                print("SETTING DEFAULT DEPTH RANGE AS TEMPORARY DEFAULT!")
-                depthRange = 1.0
 
            
 
@@ -624,13 +643,13 @@ class imageProcessor:
                 # The actual logic happens deeper inside the while loop. Look for it below, marked with "#updateme"
                 print("REMINDER: ALLOW USER-INPUT MODIFICATION FOR CASE WHERE DEPTH RANGE MAPPING CANNOT BE AUTOMATICALLY DETERMINED!")
                 print("SETTING ALL VALUES TO 'MAX' AS TEMPORARY DEFAULT!")
-            index = startDict[face] # Convert into list so that it's mutable
+            index = startDict[face]
 
             while inBounds(index):
                 refIndexHoriz = index # Save current index before the "vert" and "inwards" coords are altered
                 while inBounds(index):
                     refIndexVert = index # Save current index before the "inwards" coord is altered
-                    depth = 0
+                    depthCap = 0
                     
                     pixelVal = self.images2D[face][pixelYIndex][pixelXIndex]
                     # The negation is to represent the higher, darker pixels with higher/larger floats, to be consistent with other parts of this code
@@ -641,7 +660,8 @@ class imageProcessor:
                         depthCap = highestCellDepth
                     else:
                         depthCap = round(((highestFloat-pixelHeight)*lowestCellDepth + (pixelHeight - lowestFloat)*highestCellDepth)/depthRange)
-                    '''if pixelAlpha > 0:
+                    '''
+                    if pixelAlpha > 0:
                         #print("index:", index)
                         #print("depthCap:", depthCap)
                         depthToTraverse = constMult(depthCap, iteration3D_Dictionary[face]["inwards"])
@@ -652,10 +672,7 @@ class imageProcessor:
                         #print("\n][][][][][\n")'''
                     '''
                     '''
-                    # Make sure we don't overwrite a "definitive" value from a previous face's phase
-                    makeOutside = lambda x: abs(x)
-                    if INSIDE == 1 and OUTSIDE == -1:
-                        makeOutside = lambda x: -abs(x)
+
 
                     # Alpha check
                     if pixelAlpha > 0:
@@ -666,8 +683,16 @@ class imageProcessor:
                         y2 = int(endIndex[1])
                         z1 = int(index[2])
                         z2 = int(endIndex[2])
-                        #rint("INDICES:", x1, x2, y1, y2, z1, z2)
-                        self.object3D[x1:x2, y1:y2, z1:z2] = makeOutside(self.object3D[x1:x2, y1:y2, z1:z2] )
+                        lower, upper = self.getIndexRange(x1, y1, z1, x2, y2, z2)
+                        xL = lower[0]
+                        yL = lower[1]
+                        zL = lower[2]
+                        xU = upper[0]
+                        yU = upper[1]
+                        zU = upper[2]
+                        #print("INDICES:", x1, x2, y1, y2, z1, z2)
+                        beam = self.object3D[xL:xU, yL:yU, zL:zU]
+                        self.object3D[xL:xU, yL:yU, zL:zU] = makeOutside(beam)
                         index = add((x2,y2,z2), iteration3D_Dictionary[face]["inwards"])
                         if inBounds(index):
                             #print("BOUNDARY:", index)
@@ -686,7 +711,15 @@ class imageProcessor:
                         y2 = int(endIndex[1])
                         z1 = int(index[2])
                         z2 = int(endIndex[2])
-                        self.object3D[x1:x2, y1:y2, z1:z2] = makeOutside(self.object3D[x1:x2, y1:y2, z1:z2] )                        
+                        lower, upper = self.getIndexRange(x1, y1, z1, x2, y2, z2)
+                        xL = lower[0]
+                        yL = lower[1]
+                        zL = lower[2]
+                        xU = upper[0]
+                        yU = upper[1]
+                        zU = upper[2]
+                        beam = self.object3D[xL:xU, yL:yU, zL:zU]
+                        self.object3D[xL:xU, yL:yU, zL:zU] = makeOutside(beam)                   
                         '''while inBounds(index):
                             if self.object3D[index] == INSIDE:
                                 self.object3D[index] = OUTSIDE # OUTSIDE'''
@@ -706,6 +739,9 @@ class imageProcessor:
             print("Done one face.")
         #self.points3D = numpy.array(points3D)
         #self.points3D = numpy.unique(self.points3D, axis=0)
+        unique, counts = numpy.unique(self.object3D, return_counts=True)
+        countDict = dict(zip(unique, counts))
+        print("COUNTS:", countDict)
         return self.object3D
 
 
