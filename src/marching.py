@@ -130,8 +130,10 @@ def genTrianglesFromVertices(vertices, faces, name="marching cubes"):
 from skimage import measure
 def efficientMarchingCubes(image3D):
     print("starting efficient marching cube alg")
-    verts, faces, normals, values = measure.marching_cubes_lewiner(numpy.array(image3D))
-    # For some reason the bottom version fixes it for implicit surfaces but breaks it on the 3d textures from the images
+    # verts, faces, normals, values = measure.marching_cubes_lewiner(numpy.array(image3D))
+    # TODO: making the level = -1 makes for a better surface but that might change if the array's are not just 0 and -1 
+    # Previous message here was: for some reason the bottom version fixes it for implicit surfaces but breaks it on the 3d textures from the images
+    verts, faces, normals, values = measure.marching_cubes_lewiner(numpy.array(image3D), level=-1)
     # verts, faces, normals, values = measure.marching_cubes_lewiner(numpy.array(image3D), level=0)
     print("finished generating marching cubes")
     # print("verts\n",verts,"\nfaces\n",faces,"\nnormals\n",normals,"\nvalues\n",values)
