@@ -1,7 +1,8 @@
 import bpy
 import numpy
 from bpy.props import (StringProperty,
-                        IntProperty
+                        IntProperty,
+                        EnumProperty
                        )
 from bpy.types import (
                        Operator
@@ -24,6 +25,16 @@ class WM_OT_depthMapsUI_Operator_Generate(Operator):
     top_face_file : StringProperty(name="Filename of top depth map.")
     bottom_face_file : StringProperty(name="Filename of bottom depth map.")
     max_width : IntProperty(name="Maximum width")
+    mesh_mode : EnumProperty(
+        items=[
+            ('voxelsMode', 'Voxels', 'Voxels mode', '', 0),
+            ('marchingMode', 'Marching Cubes', 'Marching cubes mode', '', 1)
+            # ('60', '60', '60', '', 2),
+            # ('90', '90', '90', '', 3),
+            # ('120', '120', '120', '', 4),
+        ],
+        name="Type of mesh to create (e.g. voxel vs marching cubes)"
+    )
 
     # Function that runs on click
     def execute(self, context):
@@ -32,13 +43,16 @@ class WM_OT_depthMapsUI_Operator_Generate(Operator):
             files.append(getattr(self, face+"_face_file"))
         print("FILES:", files)
         imgp = imageProcessing.imageProcessor(files)
-        map = imgp.generateArray3D()
-        # imagesToMarchingInefficient(map)
-        efficientMarchingCubes(map)
+        if self.mesh_mode == "marchingMode":
+            map = imgp.generateArray3D()
+            # imagesToMarchingInefficient(map)
+            efficientMarchingCubes(map)
+        else:
+            pointsToVoxels(imgp.points3D)
         # pointsWhere = numpy.argwhere(map == 0)
         # print("Map shape:", pointsWhere.shape)
         # pointsToVoxels({"p": pointsWhere})
-        #pointsToVoxels(imgp.points3D)
+        
         #print("\n~\nACTIVE OBJECT TYPE:\n",bpy.context.active_object.type, end="\n~\n\n")
 
         return {'FINISHED'}

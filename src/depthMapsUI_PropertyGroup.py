@@ -1,7 +1,8 @@
 import bpy
 
 from bpy.props import (StringProperty,
-                        IntProperty
+                        IntProperty,
+                        EnumProperty
                        )
 from bpy.types import (
                        PropertyGroup,
@@ -123,6 +124,17 @@ class depthMapsUI_PropertyGroup(PropertyGroup):
         description="Sets a constraint on the size of the generated voxel object.",
         default=1024
     )
+    mesh_mode : EnumProperty(
+        items=[
+            ('voxelsMode', 'Voxels', 'Voxels mode', '', 0),
+            ('marchingMode', 'Marching Cubes', 'Marching cubes mode', '', 1)
+            # ('60', '60', '60', '', 2),
+            # ('90', '90', '90', '', 3),
+            # ('120', '120', '120', '', 4),
+        ],
+        default='marchingMode'
+    )
+
 
 
     
