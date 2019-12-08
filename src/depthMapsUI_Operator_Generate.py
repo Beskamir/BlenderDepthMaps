@@ -42,7 +42,7 @@ class WM_OT_depthMapsUI_Operator_Generate(Operator):
         for face in ["front", "left", "back", "right", "top", "bottom"]:
             files.append(getattr(self, face+"_face_file"))
         print("FILES:", files)
-        imgp = imageProcessing.imageProcessor(files)
+        imgp = imageProcessing.imageProcessor(files, self.max_width)
         if self.mesh_mode == "marchingMode":
             map = imgp.generateArray3D()
             # imagesToMarchingInefficient(map)

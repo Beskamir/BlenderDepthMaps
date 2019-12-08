@@ -173,7 +173,7 @@ def nearestNeighbour(pixels, h2, w2):
         iList = numpy.indices((h2, w2))
         indicesToMap = iList.transpose((1,2,0))
         getNearest = lambda p: pixels[math.floor(p[0]*h_ratio), math.floor(p[1]*w_ratio), channel]
-        newImage[:,:,channel] = getNearest(pixels)
+        newImage[:,:,channel] = numpy.apply_along_axis(getNearest, -1, indicesToMap)
 
 
 
@@ -265,23 +265,25 @@ class imageProcessor:
         maxZ = max(self.images2D[LEFT_FACE].shape[0], self.images2D[RIGHT_FACE].shape[0], self.images2D[FRONT_FACE].shape[0], self.images2D[BACK_FACE].shape[0])
 
         maxWidth = self.maxWidth
-        scaleX = maxX/maxWidth
-        scaleY = maxY/maxWidth
-        scaleZ = maxZ/maxWidth
+        scaleX = maxWidth/maxX
+        scaleY = maxWidth/maxY
+        scaleZ = maxWidth/maxZ
 
         scaleFac = min(1, scaleX, scaleY, scaleZ)
         targetX = targetY = targetZ = 0
-        if scaleFac < 1 and False:
+        print("MAX WIDTH:", self.maxWidth)
+        print("SCALE FAC:", scaleFac, "(", maxWidth, "/", (1/scaleFac)*maxWidth, ")")
+        if scaleFac < 1:
             targetX = int(scaleFac * maxX)
             targetY = int(scaleFac * maxY)
             targetZ = int(scaleFac * maxZ)
 
             self.images2D[FRONT_FACE] = nearestNeighbour(self.images2D[FRONT_FACE], targetZ, targetY)
-            self.images2D[BACK_FACE] = nearestNeighbour(self.images2D[FRONT_FACE], targetZ, targetY)
-            self.images2D[LEFT_FACE] = nearestNeighbour(self.images2D[FRONT_FACE], targetZ, targetX)
-            self.images2D[RIGHT_FACE] = nearestNeighbour(self.images2D[FRONT_FACE], targetZ, targetX)
-            self.images2D[TOP_FACE] = nearestNeighbour(self.images2D[FRONT_FACE], targetX, targetY)
-            self.images2D[BOTTOM_FACE] = nearestNeighbour(self.images2D[FRONT_FACE], targetX, targetY)
+            self.images2D[BACK_FACE] = nearestNeighbour(self.images2D[BACK_FACE], targetZ, targetY)
+            self.images2D[LEFT_FACE] = nearestNeighbour(self.images2D[LEFT_FACE], targetZ, targetX)
+            self.images2D[RIGHT_FACE] = nearestNeighbour(self.images2D[RIGHT_FACE], targetZ, targetX)
+            self.images2D[TOP_FACE] = nearestNeighbour(self.images2D[TOP_FACE], targetX, targetY)
+            self.images2D[BOTTOM_FACE] = nearestNeighbour(self.images2D[BOTTOM_FACE], targetX, targetY)
 
         # Once all the images have been scalled and crop, we can calculate the transparency-space on each side.
         for face in FACES:
