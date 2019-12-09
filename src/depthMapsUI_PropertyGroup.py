@@ -127,7 +127,8 @@ class depthMapsUI_PropertyGroup(PropertyGroup):
     mesh_mode : EnumProperty(
         items=[
             ('voxelsMode', 'Voxels', 'Voxels mode', '', 0),
-            ('marchingMode', 'Marching Cubes', 'Marching cubes mode', '', 1)
+            ('marchingMode', 'Marching Cubes', 'Marching cubes mode', '', 1),
+            ('pointCloud', 'Point Cloud', 'Point cloud mode', '', 2)
             # ('60', '60', '60', '', 2),
             # ('90', '90', '90', '', 3),
             # ('120', '120', '120', '', 4),

@@ -11,6 +11,7 @@ from bpy.types import (
 import imageProcessing
 from voxelize import pointsToVoxels
 from marching import imagesToMarchingInefficient, efficientMarchingCubes
+from genPoints import convert3DImageToPointCloud
 
 # Class for the button that, when clicked, calls the functions needed to generate the mesh.
 # The separator "_OT_" must appear in the name as of Blender 2.8
@@ -28,7 +29,8 @@ class WM_OT_depthMapsUI_Operator_Generate(Operator):
     mesh_mode : EnumProperty(
         items=[
             ('voxelsMode', 'Voxels', 'Voxels mode', '', 0),
-            ('marchingMode', 'Marching Cubes', 'Marching cubes mode', '', 1)
+            ('marchingMode', 'Marching Cubes', 'Marching cubes mode', '', 1),
+            ('pointCloud', 'Point Cloud', 'Point cloud mode', '', 2)
             # ('60', '60', '60', '', 2),
             # ('90', '90', '90', '', 3),
             # ('120', '120', '120', '', 4),
@@ -43,10 +45,13 @@ class WM_OT_depthMapsUI_Operator_Generate(Operator):
             files.append(getattr(self, face+"_face_file"))
         print("FILES:", files)
         imgp = imageProcessing.imageProcessor(files, self.max_width)
+        map = imgp.generateArray3D()
         if self.mesh_mode == "marchingMode":
-            map = imgp.generateArray3D()
             # imagesToMarchingInefficient(map)
             efficientMarchingCubes(map)
+        elif self.mesh_mode == "pointCloud":
+            # imagesToMarchingInefficient(map)
+            convert3DImageToPointCloud(map)
         else:
             pointsToVoxels(imgp.points3D)
             # map = imgp.generateArray3D()

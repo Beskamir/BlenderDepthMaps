@@ -7,11 +7,12 @@ import time
 # WIP file this likely won't run right now
 
 # Based on voxelize.py code
-def genTrianglesFromVertices(vertices, name="point cloud"):
+def createPointCloud(vertices, name="point cloud"):
     # For now, we'll combine the voxels from each of the six views into one array and then just take the unique values.
     # Later on, this could be re-structured to, for example, render the voxels from each face in a separate colour
 
-    print("Number of triangles:", len(faces))
+    print("Number of vertices:", len(vertices))
+    # print("vertice data:", vertices)
     mesh = bpy.data.meshes.new("mesh")  # add a new mesh
     obj = bpy.data.objects.new(name, mesh)
     bpy.context.collection.objects.link(obj)  # put the object into the scene (link)
@@ -27,14 +28,13 @@ def genTrianglesFromVertices(vertices, name="point cloud"):
     pointsDone = 0
 
     # Setup the vertices for the object  
-    for triangle in faces:
-        for vertexIndex in triangle:
-            bm.verts.new(vertices[vertexIndex])
-            pointsDone += 1
-            if pointsDone > nextThreshold:
-                print("Vertices completed:",pointsDone,"/",len(vertices))
-                # print(pointsDone, "vertices have been added so far.")
-                nextThreshold += printAfterCount
+    for vertex in vertices:
+        bm.verts.new(vertex)
+        pointsDone += 1
+        if pointsDone > nextThreshold:
+            print("Vertices completed:",pointsDone,"/",len(vertices))
+            # print(pointsDone, "vertices have been added so far.")
+            nextThreshold += printAfterCount
     print("Calling to_mesh().")
     bm.to_mesh(mesh)
     print("Ensuring lookup table.")
@@ -43,11 +43,11 @@ def genTrianglesFromVertices(vertices, name="point cloud"):
     debugCounter = 0
     debugSize = 50000
     # Create the faces for the object
-    for i in range(0,len(bm.verts),3):
-        bm.faces.new( [bm.verts[i+0], bm.verts[i+1],bm.verts[i+2]])
-        debugCounter+=1
-        if(debugCounter%debugSize==0):
-            print("Created triangles",debugCounter,"/",len(bm.verts)/3)
+    # for i in range(0,len(bm.verts),3):
+    #     bm.faces.new( [bm.verts[i+0], bm.verts[i+1],bm.verts[i+2]])
+    #     debugCounter+=1
+    #     if(debugCounter%debugSize==0):
+    #         print("Created triangles",debugCounter,"/",len(bm.verts)/3)
 
     if bpy.context.mode == 'EDIT_MESH':
         bmesh.update_edit_mesh(obj.data)
@@ -55,6 +55,7 @@ def genTrianglesFromVertices(vertices, name="point cloud"):
         bm.to_mesh(obj.data)
     obj.data.update()
     bm.free
+    # print("Created point cloud")
     print("Created shape and merging vertices")
     # Merge overlapping vertices once everything's generated
     bpy.ops.object.editmode_toggle()
@@ -65,6 +66,18 @@ def genTrianglesFromVertices(vertices, name="point cloud"):
     return obj
 
 
+def convert3DImageToPointCloud(image3D):
+    vertices = []
+    for x in range(len(image3D)):
+        for y in range(len(image3D[x])):
+            for z in range(len(image3D[x][y])):
+                if(image3D[x][y][z]==0):
+                    vertices.append([x,y,z])
+    # Converting 3D image to point cloud
+    # pointData = numpy.array(image3D)
+    # createPointCloud(pointData.flatten())
+    createPointCloud(vertices)
+    # Finished converting 3d image to point cloud
 
 if __name__ == "__main__":
     
@@ -89,9 +102,9 @@ if __name__ == "__main__":
     def implicitHeart(x, y, z):
         return (math.pow((2 * x*x + y*y + z*z - 1.0), 3) -
                 (0.1*x*x + y*y)*z*z*z)
-    xMax = 32
-    yMax = 32
-    zMax = 32
+    xMax = 64
+    yMax = 64
+    zMax = 64
     debugCounter=0
     debugAmount=100000
     cellCap = (2*xMax)**3
@@ -123,11 +136,14 @@ if __name__ == "__main__":
     print("generated data")
     # print(testImageArray)
     # print(len(testImageArray))
+    
     # place voxels based on that 10*10*10 array
     # imagesToMarchingInefficient(numpy.array(testImageArray))
     # efficientMarchingCubes(numpy.array(testImageArray))
     # imagesToVoxelsInefficient(testImageArray)
     # testImage = [[[0,0],[1,1]],[[1,1],[1,0]]]
-    
+
+    convert3DImageToPointCloud(testImageArray)
+
     stopTime = time.time()
     print("Script took:",stopTime-startTime)
