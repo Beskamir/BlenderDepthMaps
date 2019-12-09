@@ -28,7 +28,7 @@ modulesNames = [
     "controller"
     ]
 
-externalLibs = {"scikit-image": "skimage"}
+externalLibs = {"scikit-image": "skimage", "scipy":"scipy"}
  
 # First, we import all of the modules we did NOT write.
 import sys

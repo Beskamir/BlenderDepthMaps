@@ -1,17 +1,14 @@
 
-TOP PRIORITY:
-    - Investigate marching cube holes and iso level.
+Higher Priority:
     - Remove stray voxels.
-    - Image resizing and indexing errors.
-        - Especially the spoon, for example.
     - More sensible UI (e.g. start with an empty, or start with a cube and REPLACE it's geometry.)
         - Also, make the "clear" button also clear the geometry.
             - Try to get the memory usage down when this happens.
         - Turn the "generate mesh" button into "regenerate mesh", which clears and then remakes the mesh.
     - Look into packaging in a way that is user-friendly, and does not require administrator mode.
         - Get someone else to test out the plugin, to make sure it works.
-    - Generate a test case for where Chris's depth-range-finding algorithm doesn't work, and make sure that the updated approach works for it.
-    - Have, at bare minimum, trivial image editing.
+    - Generate a test case for a concave object, and make sure that the updated approach works for it.
+    - Image editing from within Blender.
 
 =======================================
 

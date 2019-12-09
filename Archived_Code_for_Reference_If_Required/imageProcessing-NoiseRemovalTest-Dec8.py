@@ -374,29 +374,42 @@ class imageProcessor:
     def removeNoise(self):
         # Create a kd tree from our points, to allow us to look for neighbours
         self.noise = {}
-        for k in self.points3D.keys():
-            points = self.points3D[k]
+        kChoice = 14
+        for faceKey in self.points3D.keys():
+            points = self.points3D[faceKey]
 
             print("STARTING LENGTH:", points.shape)
 
             tree = spatial.cKDTree(points)
-            getNumNeighbours = lambda p: tree.query_ball_point(p, math.sqrt(3) + 0.0001, return_length = True)
-            numNeighbours = numpy.apply_along_axis(getNumNeighbours, -1, points)
+            distanceArrays = []
+            for i in range(kChoice):
+                distanceOfI = lambda p: tree.query(p, kChoice)[0][i]
+                distanceOfIResult = numpy.apply_along_axis(distanceOfI, -1, points)
+                print("i =", i, "shape:", distanceOfIResult.shape)
+                distanceArrays.append(distanceOfIResult)
+            # Stack the k distanceArrays into one array
+            distances = numpy.stack(tuple(distanceArrays), axis=-1)
+            print("DISTANCES SHAPE:", distances.shape)
+            densities = (1/kChoice)*numpy.apply_along_axis(numpy.sum, -1, distances)
+            print("DENSITIES SHAPE:", densities.shape)
+            divDensities = 1/densities
+            expPart1 = numpy.empty(distances.shape)
+            for i in range(kChoice):
+                expPart1[:,i] = numpy.multiply(divDensities, -distances[:,i])
+            arrayLD = (1/kChoice)*numpy.apply_along_axis(numpy.sum, -1, numpy.exp(expPart1))
+            print("LD SHAPE:", arrayLD.shape)
+            pro = 1 - arrayLD
+            delta = 0.2*densities
 
-            print("NumNeighbours shape:", numNeighbours.shape)
+            self.noise[faceKey] = numpy.argwhere(pro > delta) # For later usage
+            notNoise = numpy.argwhere(pro <= delta)
 
-            unique, counts = numpy.unique(numNeighbours, return_counts=True)
-            countDict = dict(zip(unique, counts))
-
-            print("NumNeighbour counts:", countDict)
-
-            self.noise[k] = points[numpy.argwhere(numNeighbours < 4)] # For later usage
-            notNoise = numpy.argwhere(numNeighbours >= 4)
-            
-            print("Noise length:", self.noise[k].shape)
+            print("Noise length:", self.noise[faceKey].shape)
             print("NotNoise length:", notNoise.shape)
-            self.points3D[k] = points[notNoise]
-            print("FINAL LENGTH:", self.points3D[k].shape)
+
+            self.points3D[faceKey] = points[notNoise]
+
+            print("FINAL LENGTH:", self.points3D[faceKey].shape)
 
     def trimImage(self, image, w, h):
         maxDim = max(w,h)
@@ -808,11 +821,6 @@ class imageProcessor:
                 #print("Done a slice.")
             
             print("Done one face.")
-        print("Removing noise from 3D array...")
-        for k in self.noise.keys():
-            semiFlattened = self.noise[k].reshape(self.noise[k].shape[0], 3).astype(int)
-            indices = numpy.transpose(semiFlattened, (1,0))
-            self.object3D[indices[0], indices[1], indices[2]] = OUTSIDE
         #self.points3D = numpy.array(points3D)
         #self.points3D = numpy.unique(self.points3D, axis=0)
         unique, counts = numpy.unique(self.object3D, return_counts=True)

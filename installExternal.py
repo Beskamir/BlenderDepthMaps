@@ -13,7 +13,7 @@ INSTALLING THIRD-PARTY LIBRARIES!
 
 # Keys = the library name, i.e. the one for installation
 # Values = the module name, i.e. the one used for importing 
-externalLibs = {"scikit-image": "skimage"}
+externalLibs = {"scikit-image": "skimage", "scipy": "scipy"}
 
 
 # Code for installing third-party modules not packed with Blender was modified slightly from:
