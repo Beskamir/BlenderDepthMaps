@@ -247,10 +247,7 @@ class imageProcessor:
         Z_AXIS = 2
 
         # After cropping the images, we need to resize them to be consistent.
-        minX = min(self.images2D[LEFT_FACE].shape[1], self.images2D[RIGHT_FACE].shape[1], self.images2D[TOP_FACE].shape[0], self.images2D[BOTTOM_FACE].shape[0])
-        minY = min(self.images2D[FRONT_FACE].shape[1], self.images2D[BACK_FACE].shape[1], self.images2D[TOP_FACE].shape[1], self.images2D[BOTTOM_FACE].shape[1])
-        minZ = min(self.images2D[LEFT_FACE].shape[0], self.images2D[RIGHT_FACE].shape[0], self.images2D[FRONT_FACE].shape[0], self.images2D[BACK_FACE].shape[0])
-        
+        #         
         # I need to revisit this for the general case a bit later, but essentially:
         #   - using minX, minY, and minZ, calculate the scaling that would need to be done on each axis of each image.
         #   - whichever scale factor is smaller, choose that one
@@ -286,6 +283,20 @@ class imageProcessor:
             self.images2D[RIGHT_FACE] = nearestNeighbour(self.images2D[RIGHT_FACE], targetZ, targetX)
             self.images2D[TOP_FACE] = nearestNeighbour(self.images2D[TOP_FACE], targetX, targetY)
             self.images2D[BOTTOM_FACE] = nearestNeighbour(self.images2D[BOTTOM_FACE], targetX, targetY)
+        
+        minX = min(self.images2D[LEFT_FACE].shape[1], self.images2D[RIGHT_FACE].shape[1], self.images2D[TOP_FACE].shape[0], self.images2D[BOTTOM_FACE].shape[0])
+        minY = min(self.images2D[FRONT_FACE].shape[1], self.images2D[BACK_FACE].shape[1], self.images2D[TOP_FACE].shape[1], self.images2D[BOTTOM_FACE].shape[1])
+        minZ = min(self.images2D[LEFT_FACE].shape[0], self.images2D[RIGHT_FACE].shape[0], self.images2D[FRONT_FACE].shape[0], self.images2D[BACK_FACE].shape[0])
+
+        print("Trimming images so that sizes are consistent.")
+
+        self.images2D[FRONT_FACE] = self.trimImage(self.images2D[FRONT_FACE], minY, minZ)
+        self.images2D[LEFT_FACE] = self.trimImage(self.images2D[LEFT_FACE], minX, minZ)
+        self.images2D[BACK_FACE] = self.trimImage(self.images2D[BACK_FACE], minY, minZ)
+        self.images2D[RIGHT_FACE] = self.trimImage(self.images2D[RIGHT_FACE], minX, minZ)
+        self.images2D[TOP_FACE] = self.trimImage(self.images2D[TOP_FACE], minY, minX)
+        self.images2D[BOTTOM_FACE] = self.trimImage(self.images2D[BOTTOM_FACE], minY, minX)
+
 
         # Once all the images have been scalled and crop, we can calculate the transparency-space on each side.
         for face in FACES:
@@ -354,6 +365,28 @@ class imageProcessor:
         self.zLen = self.images2D[FRONT_FACE].shape[0]
 
         return
+
+    def trimImage(self, image, w, h):
+        maxDim = max(w,h)
+        edgeValue = lambda x: numpy.floor(x) * maxDim  + x
+        while image.shape[1] > w or image.shape[0] > h:
+            print("SHAPES:", image[:, 0, 3].shape, image[:, -1, 3].shape, image[0, :, 3].shape, image[-1, :, 3].shape)
+            if image.shape[1] > w:
+                firstColValue = numpy.sum(edgeValue(image[:, 0, 3].flatten()))
+                lastColValue = numpy.sum(edgeValue(image[:, -1, 3].flatten()))
+                if firstColValue > lastColValue:
+                    image = image[:, :-1, :]
+                else:
+                    image = image[:, 1:, :]
+            if image.shape[0] > h:
+                firstRowValue = numpy.sum(edgeValue(image[0, :, 3].flatten()))
+                lastRowValue = numpy.sum(edgeValue(image[-1, :, 3].flatten()))
+                if firstRowValue > lastRowValue:
+                    image = image[:-1, :, :]
+                else:
+                    image = image[1:, :, :]
+        return image
+
         
 
     def setImageHeightRanges(self):
@@ -526,14 +559,17 @@ class imageProcessor:
             highestCellDepth = self.depthDictionary[face]["highestCellDepth"]
             lowestCellDepth = self.depthDictionary[face]["lowestCellDepth"]
             depthRange = highestFloat - lowestFloat
-            if depthRange == 0.0:
+            depthify = lambda pixelHeight: ((highestFloat-pixelHeight)*lowestCellDepth + (pixelHeight - lowestFloat)*highestCellDepth)/depthRange
+            depths = numpy.empty(image[:,:,0].shape)
+            if depthRange <= 0.0:
                 print("REMINDER: ALLOW USER-INPUT MODIFICATION FOR CASE WHERE DEPTH RANGE MAPPING CANNOT BE AUTOMATICALLY DETERMINED!")
                 print("SETTING DEFAULT DEPTH RANGE AS TEMPORARY DEFAULT!")
-                depthRange = 1.0
+                depths.fill(highestCellDepth)
+            else:
+                # Negate the image, since we want darker values to be "higher"
+                depths = depthify(-image[:,:,0])
 
-            depthify = lambda pixelHeight: ((highestFloat-pixelHeight)*lowestCellDepth + (pixelHeight - lowestFloat)*highestCellDepth)/depthRange
-            # Negate the image, since we want darker values to be "higher"
-            depths = depthify(-image[:,:,0])
+            
             depths = depths.round()
 
             alphas = image[:,:,3]
@@ -542,9 +578,9 @@ class imageProcessor:
             # May also need to "flip" this depth image
             if face == FRONT_FACE or face == RIGHT_FACE or face == TOP_FACE:
                 imageDepth = structureInfo[face]["depthAxisLen"]
-                print("Image depth for face", face, ":", imageDepth)
+                '''print("Image depth for face", face, ":", imageDepth)
                 print("Max:", numpy.max(depths[visibles]))
-                print("Min:", numpy.min(depths[visibles]))
+                print("Min:", numpy.min(depths[visibles]))'''
                 depthFlip = lambda d: imageDepth - 1 - d
                 depths = depthFlip(depths)
 
@@ -641,6 +677,7 @@ class imageProcessor:
 
             if depthRange <= 0:
                 # The actual logic happens deeper inside the while loop. Look for it below, marked with "#updateme"
+                print("DEPTH RANGE:", depthRange)
                 print("REMINDER: ALLOW USER-INPUT MODIFICATION FOR CASE WHERE DEPTH RANGE MAPPING CANNOT BE AUTOMATICALLY DETERMINED!")
                 print("SETTING ALL VALUES TO 'MAX' AS TEMPORARY DEFAULT!")
             index = startDict[face]
@@ -655,7 +692,7 @@ class imageProcessor:
                     # The negation is to represent the higher, darker pixels with higher/larger floats, to be consistent with other parts of this code
                     pixelHeight = -pixelVal[0]
                     pixelAlpha = pixelVal[3]
-                    if depthRange == 0:
+                    if depthRange <= 0:
                         #updateme
                         depthCap = highestCellDepth
                     else:
@@ -720,9 +757,11 @@ class imageProcessor:
                         zU = upper[2]
                         beam = self.object3D[xL:xU, yL:yU, zL:zU]
                         self.object3D[xL:xU, yL:yU, zL:zU] = makeOutside(beam)                   
-                        '''while inBounds(index):
+                        '''
+                        while inBounds(index):
                             if self.object3D[index] == INSIDE:
-                                self.object3D[index] = OUTSIDE # OUTSIDE'''
+                                self.object3D[index] = OUTSIDE # OUTSIDE
+                        '''
                             
                 
                     '''

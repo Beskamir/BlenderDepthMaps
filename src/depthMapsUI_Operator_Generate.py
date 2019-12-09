@@ -49,9 +49,10 @@ class WM_OT_depthMapsUI_Operator_Generate(Operator):
             efficientMarchingCubes(map)
         else:
             pointsToVoxels(imgp.points3D)
-        # pointsWhere = numpy.argwhere(map == 0)
-        # print("Map shape:", pointsWhere.shape)
-        # pointsToVoxels({"p": pointsWhere})
+            # map = imgp.generateArray3D()
+            # pointsWhere = numpy.argwhere(map == 0)
+            # print("Map shape:", pointsWhere.shape)
+            # pointsToVoxels({"p": pointsWhere})
         
         #print("\n~\nACTIVE OBJECT TYPE:\n",bpy.context.active_object.type, end="\n~\n\n")
 
