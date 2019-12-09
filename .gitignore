@@ -1,5 +1,6 @@
 # Ignore wip blend files
 *.blend1
+*.blend
 
 # Ignore vscode files
 */.vscode/*
@@ -111,3 +112,4 @@ venv.bak/
 
 images/**/*.jpg
 images/**/*.png
+images/**/*.exr
