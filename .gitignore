@@ -1,6 +1,6 @@
 # Ignore wip blend files
 *.blend1
-*.blend
+# *.blend
 
 # Ignore vscode files
 */.vscode/*
