@@ -123,7 +123,28 @@ def genTrianglesFromVertices(vertices, faces, name="marching cubes"):
     bpy.ops.mesh.select_all(action='SELECT')
     bpy.ops.mesh.remove_doubles(threshold=0.0001)
     bpy.ops.object.editmode_toggle()
-    print("finished merging vertices")
+    print("finished merging vertices and now removing extras")
+
+    # remove mesh extras using https://blender.stackexchange.com/questions/139615/bmesh-ops-method-to-get-loose-vertices-edges-and-delete-from-that-list/139623#139623 
+    meshes = set(o.data for o in bpy.context.selected_objects if o.type == 'MESH')
+    bm = bmesh.new()
+
+    for m in meshes:
+
+        bm.from_mesh(m)
+        # verts with no linked faces
+        verts = [v for v in bm.verts if not v.link_faces]
+
+        print(f"{m.name}: removed {len(verts)} verts")
+        # equiv of bmesh.ops.delete(bm, geom=verts, context='VERTS')
+        for v in verts:
+            bm.verts.remove(v)
+
+        bm.to_mesh(m)
+        m.update()
+        bm.clear()
+
+    print("Finished removing extras")
     return obj
 
 #This is more effiecent but it requires getting external libraries to work in blender, to do the easiest way is to install scikit image and then delete blender's python folder forcing it to use the system's python
